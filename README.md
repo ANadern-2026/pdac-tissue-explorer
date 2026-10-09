@@ -1,8 +1,10 @@
 # PDAC Tissue Explorer
 
+[![Code DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264879.svg)](https://doi.org/10.5281/zenodo.23264879) [![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264998.svg)](https://doi.org/10.5281/zenodo.23264998)
+
 An interactive web app for exploring where any human gene is expressed in pancreatic ductal adenocarcinoma (PDAC) tissue: in tumour versus matched normal tissue, versus healthy pancreas, in which cell types, across tissue states (healthy donor, adjacent normal, primary tumour, liver metastasis, treated tumour) and in published fibroblast and tumour-cell subtypes. It combines three public datasets and needs no programming: type a gene, read the summary, download the figures and the numbers.
 
-**Live app:** <https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/> · **Data DOI:** _added after Zenodo deposit_ · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
+**Live app:** <https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/> · **Code:** [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879) · **Data:** [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
 
 ## What you can do
 
@@ -18,13 +20,16 @@ An interactive web app for exploring where any human gene is expressed in pancre
 | TCGA-PAAD + GTEx pancreas (recount3) | Bulk RNA: 147 PDAC (ductal histology), 4 adjacent normal, 330 healthy pancreas | Wilks C. et al., *Genome Biol* 2021;22:323; TCGA, *Cancer Cell* 2017; GTEx, *Science* 2020 |
 | PDAC single-cell atlas | ~620,000 cells, 234 samples from 12 studies, with published cell-type, tumour-cell and fibroblast subclusters | Loveless I.M. et al., *Clin Cancer Res* 2025;31:756 (Zenodo 10.5281/zenodo.14199536) |
 
-Please cite the original data sources together with this resource (see `CITATION.cff`).
+Please cite this resource together with the original data sources (see `CITATION.cff`):
+
+> Nadernezhad A. PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue. Zenodo. doi:10.5281/zenodo.23264879 (software); processed data: doi:10.5281/zenodo.23264998.
 
 ## Repository layout
 
 ```
 app/                 Shiny app (app.R, R/ modules, www/ styles and About page)
-app/data/            prepared data files (not in Git; built by data-raw/ or downloaded from Zenodo)
+app/data/            prepared data files (not in Git; download with get_data.R or build with data-raw/)
+get_data.R           downloads the prepared data files from Zenodo (checksum-verified)
 data-raw/            data preparation, run in order:
   00_scatlas_readiness.R   filtering of the published atlas object (cycling cells, ambient-RNA outliers)
   01_scatlas_summaries.R   per-sample x cell-type summaries, atlas map subsample
@@ -42,7 +47,7 @@ deploy/docker/Dockerfile        optional container for self-hosting
 Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `markdown`, `patchwork`, `scales`.
 
 ```r
-# with the prepared files in app/data/ (build them with data-raw/, or download from Zenodo)
+source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/
 shiny::runApp("app")
 ```
 

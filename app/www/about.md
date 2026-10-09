@@ -30,7 +30,7 @@ The **PDAC Tissue Explorer** shows where a gene is expressed in human pancreatic
 
 ## How to cite
 
-If you use this resource, please cite the app (see the repository's CITATION file for the DOI) **and the original data sources**: Cao et al., *Cell* 2021; Wilks et al., *Genome Biol* 2021 (recount3); The Cancer Genome Atlas Research Network, *Cancer Cell* 2017; the GTEx Consortium, *Science* 2020; Loveless et al., *Clin Cancer Res* 2025, and the twelve single-cell studies it integrates.
+If you use this resource, please cite it — Nadernezhad A., *PDAC Tissue Explorer*, Zenodo, [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879); processed data [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) — **and the original data sources**: Cao et al., *Cell* 2021; Wilks et al., *Genome Biol* 2021 (recount3); The Cancer Genome Atlas Research Network, *Cancer Cell* 2017; the GTEx Consortium, *Science* 2020; Loveless et al., *Clin Cancer Res* 2025, and the twelve single-cell studies it integrates.
 
 ## Author
 

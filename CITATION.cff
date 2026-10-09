@@ -9,6 +9,17 @@ authors:
     orcid: "https://orcid.org/0000-0002-3761-1601"
 version: 0.1.0
 date-released: "2026-10-09"
+doi: "10.5281/zenodo.23264879"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23264879"
+    description: "Software, all versions (concept DOI)"
+  - type: doi
+    value: "10.5281/zenodo.23264880"
+    description: "Software, version 0.1.0"
+  - type: doi
+    value: "10.5281/zenodo.23264998"
+    description: "Processed data files (dataset)"
 license: MIT
 repository-code: "https://github.com/ANadern-2026/pdac-tissue-explorer"
 url: "https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/"
