@@ -1,0 +1,27 @@
+03_recount3 started 2026-10-09 11:47:37 UTC
+using cached data-raw/source/recount3/TCGA_PAAD_log2tpm.rds MD5 c9f6b064a4419038df61093c777e1a1e 
+using cached data-raw/source/recount3/GTEx_pancreas_log2tpm.rds MD5 e3371ec1c361308f36ec1fab79230211 
+cohorts: Adjacent normal (TCGA) = 4; Healthy pancreas (GTEx) = 330; PDAC (TCGA) = 147 
+genes kept (TPM >= 1 in >= 10% of any cohort): 27256 of 56937 
+wrote app/data/bulk_tcga_gtex.rds (21.6 MB) 
+finished 2026-10-09 11:48:46 UTC
+
+R version 4.3.3 (2024-02-29)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 24.04.5 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.12.0 
+LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.12.0
+
+locale:
+[1] C
+
+time zone: Etc/UTC
+tzcode source: system (glibc)
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+loaded via a namespace (and not attached):
+[1] compiler_4.3.3 tools_4.3.3   

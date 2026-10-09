@@ -1,0 +1,14 @@
+# prepared data and raw downloads are distributed via Zenodo, not Git
+app/data/
+data-raw/source/
+# private development material (not part of the public project)
+dev/
+# deployment records written by rsconnect (account-specific)
+rsconnect/
+# R / editor files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.DS_Store

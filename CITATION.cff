@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use the PDAC Tissue Explorer, please cite it and the original data sources listed below."
+title: "PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue"
+type: software
+authors:
+  - family-names: "Nadernezhad"
+    given-names: "Ali"
+    affiliation: "Leibniz-Institut für Polymerforschung Dresden e.V."
+    orcid: "https://orcid.org/0000-0002-3761-1601"
+version: 0.1.0
+date-released: "2026-10-09"
+license: MIT
+repository-code: "https://github.com/ANadern-2026/pdac-tissue-explorer"
+url: "https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/"
+keywords: [pancreatic cancer, PDAC, single-cell RNA-seq, proteomics, CPTAC, TCGA, GTEx, Shiny]
+references:
+  - type: article
+    title: "Proteogenomic characterization of pancreatic ductal adenocarcinoma"
+    authors: [{family-names: "Cao", given-names: "Liwei"}]
+    journal: "Cell"
+    year: 2021
+    volume: 184
+    start: 5031
+    doi: "10.1016/j.cell.2021.08.023"
+  - type: article
+    title: "Human pancreatic cancer single-cell atlas reveals association of CXCL10+ fibroblasts and basal subtype tumor cells"
+    authors: [{family-names: "Loveless", given-names: "Ian M."}]
+    journal: "Clinical Cancer Research"
+    year: 2025
+    volume: 31
+    start: 756
+    doi: "10.1158/1078-0432.CCR-24-2183"
+  - type: article
+    title: "recount3: summaries and queries for large-scale RNA-seq expression and splicing"
+    authors: [{family-names: "Wilks", given-names: "Christopher"}]
+    journal: "Genome Biology"
+    year: 2021
+    volume: 22
+    start: 323
+    doi: "10.1186/s13059-021-02533-6"
+  - type: article
+    title: "Integrated genomic characterization of pancreatic ductal adenocarcinoma"
+    authors: [{name: "The Cancer Genome Atlas Research Network"}]
+    journal: "Cancer Cell"
+    year: 2017
+    volume: 32
+    start: 185
+    doi: "10.1016/j.ccell.2017.07.007"
+  - type: article
+    title: "The GTEx Consortium atlas of genetic regulatory effects across human tissues"
+    authors: [{name: "GTEx Consortium"}]
+    journal: "Science"
+    year: 2020
+    volume: 369
+    start: 1318
+    doi: "10.1126/science.aaz1776"

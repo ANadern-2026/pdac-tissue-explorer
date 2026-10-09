@@ -1,0 +1,18 @@
+body { background: #fcfcfb; }
+.navbar { border-bottom: 1px solid #e9e8e4; }
+.badge-version { font-size: 0.7rem; color: #8a8984; margin-left: 0.5rem; font-weight: 400; }
+.gene-header { margin: 0.25rem 0 1rem 0; }
+.gene-header h2 { font-weight: 700; margin-bottom: 0.1rem; }
+.gene-name { font-weight: 400; font-size: 1.05rem; color: #52514e; margin-left: 0.6rem; }
+.aliases { color: #8a8984; font-size: 0.85rem; margin-bottom: 0.4rem; }
+.chip { display: inline-block; padding: 0.15rem 0.6rem; margin: 0 0.35rem 0.25rem 0; border-radius: 999px; font-size: 0.78rem; }
+.chip-on { background: #e7f0fc; color: #184f95; }
+.chip-off { background: #f0efec; color: #8a8984; text-decoration: line-through; }
+.note { color: #52514e; font-size: 0.82rem; margin-top: 0.6rem; }
+.summary-list li { margin-bottom: 0.7rem; line-height: 1.5; }
+.examples { font-size: 0.85rem; color: #52514e; }
+.examples a { margin-right: 0.5rem; }
+.dl-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.3rem 0 0.4rem 0; }
+.opt-name { color: #52514e; font-size: 0.85em; }
+.opt-alias { color: #8a8984; font-size: 0.78em; }
+.about { max-width: 860px; }
