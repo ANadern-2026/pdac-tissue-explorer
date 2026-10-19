@@ -12,3 +12,5 @@ rsconnect/
 .Ruserdata
 *.Rproj
 .DS_Store
+# server-specific settings (IP address, domain, e-mail)
+deploy/server/.env

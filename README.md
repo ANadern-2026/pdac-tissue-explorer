@@ -39,7 +39,8 @@ data-raw/            data preparation, run in order:
   logs/                    provenance logs (input checksums, counts, session info)
 tests/               testthat tests: pipeline on a miniature atlas, app statistics
 deploy/connect-cloud/deploy.R   publishing to Posit Connect Cloud (free hosting)
-deploy/docker/Dockerfile        optional container for self-hosting
+deploy/docker/Dockerfile        minimal container for local use
+deploy/server/                  self-hosting on a server: Docker Compose + Caddy (HTTPS), see its README
 ```
 
 ## Run it locally

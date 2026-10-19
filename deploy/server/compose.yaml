@@ -1,0 +1,44 @@
+# PDAC Tissue Explorer on a self-hosted server: Shiny app behind Caddy (automatic HTTPS).
+# Server-specific values (dedicated IP address, domain, e-mail) come from the .env file next to this one.
+#  - Incoming: ports 80/443 are published ONLY on ${PDAC_IP}; the app container itself publishes no port.
+#  - Outgoing: traffic from both containers leaves the server with source address ${PDAC_IP} (SNAT).
+name: pdac
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/server/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - pdac-data:/srv/pdac/app/data
+    networks: [pdac]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "${PDAC_IP:?set PDAC_IP in .env}:80:80"
+      - "${PDAC_IP}:443:443"
+      - "${PDAC_IP}:443:443/udp"
+    environment:
+      PDAC_DOMAIN: ${PDAC_DOMAIN:?set PDAC_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [pdac]
+
+networks:
+  pdac:
+    driver: bridge
+    driver_opts:
+      com.docker.network.host_ipv4: ${PDAC_IP}                 # source address for outgoing traffic
+      com.docker.network.bridge.host_binding_ipv4: ${PDAC_IP}  # default address for any published port
+
+volumes:
+  pdac-data:
+  caddy-data:
+  caddy-config:
