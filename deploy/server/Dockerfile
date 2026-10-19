@@ -2,20 +2,21 @@
 # Works on x86_64 and ARM64 servers: R and all packages come as prebuilt Ubuntu 24.04 packages
 # (R 4.3.3, shiny 1.8, ggplot2 3.4, plotly 4.10), so nothing is compiled during the build.
 # Build context is the repository root. Data files are not baked in; they live in a Docker volume
-# filled once with get_data.R (see README.md in this folder).
+# filled once with get_data.R, which downloads the prepared tables and builds the on-disk data store (see README.md).
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=Etc/UTC
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
        r-base-core r-cran-shiny r-cran-bslib r-cran-ggplot2 r-cran-plotly r-cran-dt \
-       r-cran-matrix r-cran-markdown r-cran-patchwork r-cran-scales \
+       r-cran-matrix r-cran-markdown r-cran-patchwork r-cran-scales r-cran-dbi r-cran-rsqlite \
     && rm -rf /var/lib/apt/lists/*
 # unprivileged user for the app (the base image already uses UID 1000 for "ubuntu")
 RUN useradd --create-home shiny
 
 WORKDIR /srv/pdac
 COPY get_data.R /srv/pdac/get_data.R
+COPY data-raw/05_build_store.R data-raw/helpers.R /srv/pdac/data-raw/
 COPY app/ /srv/pdac/app/
 RUN mkdir -p /srv/pdac/app/data && chown -R shiny:shiny /srv/pdac
 

@@ -1,4 +1,5 @@
 # ---- plain-language summaries ---------------------------------------------------------------------------------
+# A p-value is NA when every value is identical (e.g. a gene not expressed in any sample): reported as no difference.
 fold_txt <- function(log2diff) { f <- 2^abs(log2diff); if (f < 1.15) "" else paste0(" (about ", if (f >= 10) round(f) else formatC(f, format = "f", digits = 1), "-fold ", if (log2diff > 0) "higher" else "lower", ")") }
 prose <- function(x) unname(CELLTYPE_PROSE[as.character(x)])
 
@@ -6,20 +7,20 @@ txt_cptac <- function(p, s, symbol, assay) {
   what <- if (assay == "protein") "Protein" else "RNA"
   if (is.null(p)) return(paste0(what, " (CPTAC): ", symbol, " is not in the ", tolower(what), " data."))
   if (!isTRUE(s$ok)) return(paste0(what, " (CPTAC): measured in only ", s$n, " matched tumour/normal pairs, too few to compare."))
-  dir <- if (s$p >= 0.05) "no clear difference between tumour and matched adjacent normal tissue" else if (s$median_diff > 0) "higher in tumour than in matched adjacent normal tissue" else "lower in tumour than in matched adjacent normal tissue"
+  dir <- if (!isTRUE(s$p < 0.05)) "no clear difference between tumour and matched adjacent normal tissue" else if (s$median_diff > 0) "higher in tumour than in matched adjacent normal tissue" else "lower in tumour than in matched adjacent normal tissue"
   cov <- if (assay == "protein" && p$n_tumours_measured < 0.8 * p$n_tumours_total)
     paste0(" Note: quantified in only ", p$n_tumours_measured, " of ", p$n_tumours_total, " tumours, typically a sign of low abundance; the comparison covers that subset.") else ""
   paste0(what, " (CPTAC, ", s$n, " patients): ", dir, "; ", s$n_up, " of ", s$n, " patients higher in tumour, median change ",
-         fmt_signed(s$median_diff), " log2 units", if (s$p < 0.05) fold_txt(s$median_diff) else "", " (paired Wilcoxon p = ", fmt_p(s$p), ").", cov)
+         fmt_signed(s$median_diff), " log2 units", if (isTRUE(s$p < 0.05)) fold_txt(s$median_diff) else "", " (paired Wilcoxon p = ", fmt_p(s$p), ").", cov)
 }
 
 txt_bulk <- function(b, symbol) {
   if (is.null(b)) return(paste0("Bulk RNA (TCGA/GTEx): ", symbol, " is not in this table (not expressed at TPM >= 1 in at least 10% of any cohort)."))
   pd <- b$value[b$cohort == "PDAC (TCGA)"]; gx <- b$value[b$cohort == "Healthy pancreas (GTEx)"]; an <- b$value[b$cohort == "Adjacent normal (TCGA)"]
   t <- two_group(pd, gx)
-  dir <- if (t$p >= 0.05 || abs(t$diff) < 0.2) "similar in PDAC and healthy pancreas" else if (t$diff > 0) "higher in PDAC than in healthy pancreas" else "lower in PDAC than in healthy pancreas"
+  dir <- if (!isTRUE(t$p < 0.05) || abs(t$diff) < 0.2) "similar in PDAC and healthy pancreas" else if (t$diff > 0) "higher in PDAC than in healthy pancreas" else "lower in PDAC than in healthy pancreas"
   paste0("Bulk RNA (TCGA/GTEx): ", dir, ": median ", fmt_num(t$median_x), " vs ", fmt_num(t$median_y), " log2(TPM+1)",
-         if (t$p < 0.05) fold_txt(t$diff) else "", " (", t$n_x, " vs ", t$n_y, " samples). The ", length(an),
+         if (isTRUE(t$p < 0.05)) fold_txt(t$diff) else "", " (", t$n_x, " vs ", t$n_y, " samples). The ", length(an),
          " TCGA adjacent-normal samples have a median of ", fmt_num(stats::median(an)),
          "; differences against healthy pancreas partly reflect the much higher stromal content of tumours.")
 }
@@ -44,7 +45,7 @@ txt_state <- function(v, symbol) {
   a <- two_group(ps$avg_expr[ps$state == "Primary tumour"], ps$avg_expr[ps$state == "Adjacent normal"])
   m <- two_group(ps$avg_expr[ps$state == "Liver metastasis"], ps$avg_expr[ps$state == "Primary tumour"])
   word <- function(t, a, b) if (!isTRUE(t$ok)) paste0(a, " vs ", b, ": too few samples") else
-    paste0(a, " vs ", b, ": ", if (t$p >= 0.05) "no clear difference" else if (t$diff > 0) "higher" else "lower", " (median ", fmt_num(t$median_x), " vs ", fmt_num(t$median_y), ", p = ", fmt_p(t$p), ", ", t$n_x, " vs ", t$n_y, " samples)")
+    paste0(a, " vs ", b, ": ", if (!isTRUE(t$p < 0.05)) "no clear difference" else if (t$diff > 0) "higher" else "lower", " (median ", fmt_num(t$median_x), " vs ", fmt_num(t$median_y), ", p = ", fmt_p(t$p), ", ", t$n_x, " vs ", t$n_y, " samples)")
   paste0("Within ", prose(topc), " (the main ", symbol, "-carrying cells): ", word(a, "primary tumour", "adjacent normal"), "; ", word(m, "liver metastasis", "primary tumour"), ".")
 }
 

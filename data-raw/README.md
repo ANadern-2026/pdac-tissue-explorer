@@ -9,5 +9,8 @@ Run from the repository root, in order. Each script writes a provenance log to `
 | `02_cptac.R` | downloads from LinkedOmics | `cptac.rds` | any machine, minutes |
 | `03_recount3.R` | downloads via recount3 | `bulk_tcga_gtex.rds` | any machine, minutes |
 | `04_gene_index.R` | outputs of 01–03 | `genes.rds` | any machine, a minute |
+| `05_build_store.R` | outputs of 01–04 | `cptac.sqlite`, `bulk.sqlite`, `sc.sqlite` (the data store the app reads) | any machine, ~6 min, ~2 GB RAM |
+
+The app itself needs only `genes.rds` and the three `.sqlite` files: each holds one compressed record per gene plus the small tables (samples, cell groups, atlas-map coordinates), and `05` checks every stored record against the source tables. `get_data.R` (repository root) downloads the outputs of 01–04 from Zenodo and runs `05`.
 
 `helpers.R` contains the logging helpers. Tests: `testthat::test_dir("tests/testthat")` runs `01` on a miniature atlas and checks the app's statistics.

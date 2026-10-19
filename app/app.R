@@ -2,12 +2,13 @@
 # Explore where any gene is expressed in human pancreatic ductal adenocarcinoma (PDAC) tissue, using public
 # proteomic, bulk transcriptomic and single-cell data. Data files are built by the scripts in ../data-raw/.
 suppressPackageStartupMessages({
-  library(shiny); library(bslib); library(ggplot2); library(plotly); library(DT); library(Matrix)
+  library(shiny); library(bslib); library(ggplot2); library(plotly); library(DT)
 })
 # used via pkg:: or indirectly (includeMarkdown); listed here so deployment tools detect them
 if (FALSE) { library(markdown); library(patchwork); library(scales) }
 for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f, local = TRUE)
-D <- load_app_data()
+D <- load_app_data()            # gene index + small tables in memory; per-gene values are read from the on-disk store
+onStop(function() close_app_data(D))
 
 EXAMPLE_GENES <- intersect(c("MSLN", "KRT17", "FAP", "GATA6", "CEACAM5", "COL11A1", "CD274", "KRT19"), D$genes$symbol)
 EXAMPLE_LISTS <- list(
@@ -87,7 +88,7 @@ ui <- page_navbar(
           note("A stratified subsample of atlas cells, positioned by the published atlas UMAP. Grey = not detected.")),
         nav_panel("Data",
           note("Per-sample single-cell values for the selected gene (all tissue states). Use the buttons to copy or download."),
-          DTOutput("t_sc"), hr(), note("CPTAC matched tumour/normal values."), DTOutput("t_cptac"))
+          DTOutput("t_sc", fill = FALSE), hr(), note("CPTAC matched tumour/normal values."), DTOutput("t_cptac", fill = FALSE))
       ))),
   nav_panel("Compare genes", value = "multi",
     layout_sidebar(
@@ -127,6 +128,7 @@ server <- function(input, output, session) {
   gene <- reactive({ req(input$gene, input$gene %in% D$genes$symbol); input$gene })
   pr <- reactive(cptac_pairs(D, gene(), "protein")); rn <- reactive(cptac_pairs(D, gene(), "rna"))
   bk <- reactive(bulk_values(D, gene())); sv <- reactive(sc_values(D, gene()))
+  uv <- reactive(umap_values(D, gene_row(D, gene())$sym_sc))
   cs <- reactive({ v <- sv(); if (is.null(v)) NULL else celltype_summary(v, input$context) })
   cs_naive <- reactive({ v <- sv(); if (is.null(v)) NULL else celltype_summary(v, "Primary tumour") })
 
@@ -135,7 +137,7 @@ server <- function(input, output, session) {
     bulk = reactive(plot_bulk(bk(), gene())), ct = reactive(plot_celltypes(cs(), gene(), input$context)),
     share = reactive(plot_share(cs(), gene())), frac = reactive(plot_frac(cs(), gene())),
     states = reactive(plot_states(sv(), gene(), input$compartments)), fibro = reactive(plot_fibro(sv(), gene())),
-    ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), gene_row(D, gene())$sym_sc)))
+    ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())))
 
   output$gene_header <- renderUI({
     gr <- gene_row(D, gene())
@@ -165,7 +167,7 @@ server <- function(input, output, session) {
   output$p_umap <- renderPlotly({
     u <- D$umap; validate(need(!is.null(u), "Atlas map not available.")); col <- gene_row(D, gene())$sym_sc
     validate(need(!is.na(col), paste(gene(), "is not in the single-cell data.")))
-    val <- as.numeric(u$expr[, col]); o <- order(val)
+    val <- uv(); validate(need(!is.null(val), paste(gene(), "is not on the atlas map."))); o <- order(val)
     plot_ly(x = u$coords$UMAP_1[o], y = u$coords$UMAP_2[o], type = "scattergl", mode = "markers",
             marker = list(size = 3, color = val[o], colorscale = list(c(0, INK[["zero"]]), c(0.001, SEQ_RAMP[1]), c(1, SEQ_RAMP[6])), showscale = TRUE,
                           colorbar = list(title = "log1p\nCP10k", thickness = 10)),

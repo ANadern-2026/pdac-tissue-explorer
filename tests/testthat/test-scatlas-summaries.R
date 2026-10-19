@@ -5,15 +5,20 @@ test_that("single-cell summaries match per-cell recomputation", {
   suppressPackageStartupMessages({ library(Matrix); library(SeuratObject) })
   root <- normalizePath(file.path(test_path(), "..", ".."))
   source(file.path(root, "tests", "fixtures", "make_mini_atlas.R"))
-  tmp <- withr_tempdir <- tempfile("mini"); dir.create(tmp); make_mini_atlas(tmp)
+  tmp <- tempfile("mini"); dir.create(tmp); tmp <- normalizePath(tmp, winslash = "/"); make_mini_atlas(tmp)
   out <- file.path(tmp, "out"); dir.create(out)
+  # point 01's settings at the mini atlas: replace each assignment line verbatim (deparse() quotes paths safely,
+  # also Windows paths with backslashes) and fail if a setting is not found exactly once
   script <- readLines(file.path(root, "data-raw", "01_scatlas_summaries.R"))
-  script <- sub('^ATLAS_RDS .*', sprintf('ATLAS_RDS <- "%s"', file.path(tmp, "sc_ref_base.rds")), script)
-  script <- sub('^DUCTAL_LABELS .*', sprintf('DUCTAL_LABELS <- "%s"', file.path(tmp, "DuctalTumor_Subcluster.txt.gz")), script)
-  script <- sub('^FIBRO_LABELS .*', sprintf('FIBRO_LABELS <- "%s"', file.path(tmp, "Fibroblast_Subcluster.txt.gz")), script)
-  script <- sub('^OUT_DIR .*', sprintf('OUT_DIR <- "%s"', out), script); script <- sub('^LOG_DIR .*', sprintf('LOG_DIR <- "%s"', out), script)
-  script <- sub('^MIN_FEATURES .*', "MIN_FEATURES <- 10", script); script <- sub('^MIN_GENE_CELLS .*', "MIN_GENE_CELLS <- 5", script)
-  script <- sub('^UMAP_CELLS .*', "UMAP_CELLS <- 1000", script); script <- sub('^UMAP_MIN_TYPE .*', "UMAP_MIN_TYPE <- 100", script)
+  set_var <- function(script, var, value) {
+    i <- grep(paste0("^", var, "\\s*<-"), script)
+    if (length(i) != 1L) stop("01_scatlas_summaries.R: expected one assignment of ", var, ", found ", length(i))
+    script[i] <- paste(var, "<-", deparse(value)); script
+  }
+  settings <- list(ATLAS_RDS = file.path(tmp, "sc_ref_base.rds"), DUCTAL_LABELS = file.path(tmp, "DuctalTumor_Subcluster.txt.gz"),
+                   FIBRO_LABELS = file.path(tmp, "Fibroblast_Subcluster.txt.gz"), OUT_DIR = out, LOG_DIR = out,
+                   MIN_FEATURES = 10, MIN_GENE_CELLS = 5, UMAP_CELLS = 1000, UMAP_MIN_TYPE = 100)
+  for (v in names(settings)) script <- set_var(script, v, settings[[v]])
   f <- file.path(tmp, "run01.R"); writeLines(script, f)
   expect_no_error(suppressMessages(capture.output(source(f, local = new.env()))))
 

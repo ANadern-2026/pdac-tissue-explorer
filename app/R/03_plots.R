@@ -166,9 +166,9 @@ plot_multi_forest <- function(tab) {
          caption = src_caption("CPTAC: matched pairs; TCGA vs GTEx: PDAC vs healthy pancreas (unpaired, interval not shown)")) + theme_px()
 }
 
-plot_umap_static <- function(u, symbol, gene_col) {
+plot_umap_static <- function(u, symbol, values) {     # values: umap_values() for the gene, NULL if not in the atlas
   if (is.null(u)) return(empty_plot("Atlas map not available"))
-  df <- data.frame(u$coords, value = if (is.na(gene_col)) 0 else as.numeric(u$expr[, gene_col]))
+  df <- data.frame(u$coords, value = if (is.null(values)) 0 else values)
   df <- df[order(df$value), ]
   ggplot(df, aes(UMAP_1, UMAP_2)) + geom_point(aes(colour = value), size = 0.25) +
     scale_colour_gradientn(colours = c(INK[["zero"]], SEQ_RAMP[-1]), name = "log1p(CP10k)") + coord_equal() +

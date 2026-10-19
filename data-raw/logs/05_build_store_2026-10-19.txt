@@ -1,0 +1,38 @@
+05_build_store started 2026-10-19 15:20:27 UTC
+cptac: building cptac.sqlite from cptac.rds ... 
+cptac.sqlite/protein: 11662 genes verified 
+cptac.sqlite/rna: 28057 genes verified 
+cptac.sqlite: 20.5 MB, MD5 ecfae858a474bd9447379b057fea176a, 0.7 min 
+bulk: building bulk.sqlite from bulk_tcga_gtex.rds ... 
+bulk.sqlite/log2tpm_x1000: 27256 genes verified 
+bulk.sqlite: 29.9 MB, MD5 6e6ed930fc80c88e6879699e7a2d4771, 0.4 min 
+sc: building sc.sqlite from sc_groups.rds, sc_expr.rds, sc_umap.rds ... 
+sc.sqlite/umap: 27879 genes verified 
+sc.sqlite/expr: 27879 genes verified 
+sc.sqlite: 273.8 MB, MD5 40db9da64c023ebbc26cfdfd78ee1e74, 4.1 min 
+gene index: all 44573 genes resolve to stored records 
+finished 2026-10-19 15:25:41 UTC
+
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26200)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] RSQLite_2.4.6 DBI_1.3.0     Matrix_1.7-5 
+
+loaded via a namespace (and not attached):
+ [1] fastmap_1.2.0     bit_4.6.0         lattice_0.22-9    cachem_1.1.0      blob_1.3.0        pkgconfig_2.0.3   memoise_2.0.1     bit64_4.8.6       cli_3.6.6        
+[10] grid_4.4.1        vctrs_0.7.3       compiler_4.4.1    rstudioapi_0.19.0 tools_4.4.1       otel_0.2.0        rlang_1.3.0      

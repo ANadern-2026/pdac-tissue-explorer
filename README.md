@@ -28,16 +28,18 @@ Please cite this resource together with the original data sources (see `CITATION
 
 ```
 app/                 Shiny app (app.R, R/ modules, www/ styles and About page)
-app/data/            prepared data files (not in Git; download with get_data.R or build with data-raw/)
-get_data.R           downloads the prepared data files from Zenodo (checksum-verified)
+app/data/            prepared data (not in Git; get_data.R or data-raw/): gene index + on-disk store (*.sqlite)
+get_data.R           downloads the prepared data files from Zenodo (checksum-verified) and builds the data store
 data-raw/            data preparation, run in order:
   00_scatlas_readiness.R   filtering of the published atlas object (cycling cells, ambient-RNA outliers)
   01_scatlas_summaries.R   per-sample x cell-type summaries, atlas map subsample
   02_cptac.R               CPTAC download and processing
   03_recount3.R            TCGA-PAAD / GTEx via recount3
   04_gene_index.R          searchable gene index, symbol reconciliation across datasets
+  05_build_store.R         on-disk data store: one SQLite file per dataset, one compressed record per gene
   logs/                    provenance logs (input checksums, counts, session info)
-tests/               testthat tests: pipeline on a miniature atlas, app statistics
+tests/               testthat tests: pipeline on a miniature atlas, data store, app statistics;
+                     regression-v01.R compares every output of the data store with the v0.1 in-memory data
 deploy/connect-cloud/           legacy Connect Cloud address: relocation notice (deploy.R), later a forwarding page (retire.R)
 deploy/docker/Dockerfile        minimal container for local use
 deploy/server/                  self-hosting on a server: Docker Compose + Caddy (HTTPS), see its README
@@ -45,12 +47,14 @@ deploy/server/                  self-hosting on a server: Docker Compose + Caddy
 
 ## Run it locally
 
-Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `markdown`, `patchwork`, `scales`.
+Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `markdown`, `patchwork`, `scales`.
 
 ```r
-source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/
+source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/ and builds the data store
 shiny::runApp("app")
 ```
+
+The app reads each gene's values on demand from the data store (`app/data/*.sqlite`), so it runs in well under 1 GB of memory.
 
 ## Rebuild the data
 
@@ -61,6 +65,7 @@ source("data-raw/03_recount3.R")     # needs Bioconductor recount3 on the first 
 source("data-raw/00_scatlas_readiness.R")   # ~ several hours; produces sc_ref_base.rds
 source("data-raw/01_scatlas_summaries.R")   # ~ 1 h, ~50 GB RAM; set the paths at the top
 source("data-raw/04_gene_index.R")
+source("data-raw/05_build_store.R")         # converts the tables into the app's on-disk data store
 testthat::test_dir("tests/testthat")
 ```
 

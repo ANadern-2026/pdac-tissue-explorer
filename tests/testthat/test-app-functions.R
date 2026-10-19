@@ -46,4 +46,6 @@ test_that("plain-language text handles missing data gracefully", {
   expect_match(fold_txt(log2(186.3)), "about 186-fold higher")
   expect_match(fold_txt(-1), "about 2.0-fold lower")
   expect_identical(fold_txt(0.1), "")
+  zero <- list(pairs = data.frame(case_id = paste0("P", 1:8), normal = 0, tumour = 0, diff = 0), n_tumours_measured = 8, n_tumours_total = 8)
+  expect_match(txt_cptac(zero, paired_stats(zero), "XYZ", "rna"), "no clear difference.*p = n/a")   # all values identical: p is NA
 })
