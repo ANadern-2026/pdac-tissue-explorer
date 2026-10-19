@@ -10,8 +10,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
        r-base-core r-cran-shiny r-cran-bslib r-cran-ggplot2 r-cran-plotly r-cran-dt \
        r-cran-matrix r-cran-markdown r-cran-patchwork r-cran-scales \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 1000 shiny
+    && rm -rf /var/lib/apt/lists/*
+# unprivileged user for the app (the base image already uses UID 1000 for "ubuntu")
+RUN useradd --create-home shiny
 
 WORKDIR /srv/pdac
 COPY get_data.R /srv/pdac/get_data.R
