@@ -9,6 +9,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/server/Dockerfile
+      network: host        # the image build downloads Ubuntu packages through the server's own network
     restart: unless-stopped
     volumes:
       - pdac-data:/srv/pdac/app/data

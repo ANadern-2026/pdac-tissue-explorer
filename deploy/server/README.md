@@ -1,7 +1,7 @@
 # Self-hosting on a Linux server (Docker + Caddy)
 
 Runs the app on a server with a dedicated IP address and domain, with automatic HTTPS.
-Tested setup: Ubuntu 26.04, x86_64, 2 vCPU, 4 GB RAM (+ swap). The app needs about 3 GB RAM.
+Works on x86_64 and ARM64 servers (e.g. 2 vCPU, 4 GB RAM, Ubuntu 24.04, plus 2–4 GB swap). The app needs about 3 GB RAM.
 
 * Incoming: ports 80/443 are published only on the address in `PDAC_IP`; the Shiny container publishes no port.
 * Outgoing: traffic from the containers (data download, certificate renewal) leaves with source address `PDAC_IP`.
