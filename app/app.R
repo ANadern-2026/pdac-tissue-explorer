@@ -43,6 +43,9 @@ fig_downloads <- function(id) div(class = "dl-row", downloadButton(paste0(id, "_
                                   downloadButton(paste0(id, "_png"), "Figure (PNG)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_csv"), "Data (CSV)", class = "btn-sm btn-outline-secondary"))
 note <- function(...) p(class = "note", ...)
+# Data-tab tables: DataTables' own style (style = "default") - the Ubuntu r-cran-dt package used on the server lacks the
+# Bootstrap 5 styles that DT would otherwise pick for a bslib page, which left the buttons unstyled. CSV file name: Buttons >= 1.2 reads `filename`, the server's Buttons 1.0.3 reads `title`.
+dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", format(Sys.Date())); list("copy", list(extend = "csvHtml5", filename = f, title = f)) }
 
 # ---- UI ------------------------------------------------------------------------------------------------------
 ui <- page_navbar(
@@ -192,10 +195,13 @@ server <- function(input, output, session) {
     a <- sc_aggregate(v[!is.na(v$state), ], c("sample", "study", "state", "compartment"))
     a$study <- paste0(a$study, " (", STUDY_CITATION[a$study], ")"); a[order(a$compartment, a$state, a$sample), ] })
   cptac_table <- reactive({ rbind(if (!is.null(pr())) data.frame(assay = "protein", pr()$pairs), if (!is.null(rn())) data.frame(assay = "RNA", rn()$pairs)) })
-  output$t_sc <- renderDT(datatable(transform(sc_table(), mean_cp10k = round(mean_cp10k, 3), avg_expr = round(avg_expr, 3), frac = round(frac, 4)),
-                                    rownames = FALSE, extensions = "Buttons", options = list(pageLength = 10, dom = "Bfrtip", buttons = c("copy", "csv"))))
-  output$t_cptac <- renderDT(datatable(cptac_table(), rownames = FALSE, extensions = "Buttons", options = list(pageLength = 10, dom = "Bfrtip", buttons = c("copy", "csv"))) |>
-                               formatRound(c("normal", "tumour", "diff"), 3))
+  # whole table sent to the browser (server = FALSE; <= ~2,500 rows) so Copy/CSV export all rows, not just the visible page;
+  # numbers are formatted for display (strings): the server's Buttons 1.0.3 cannot export raw numeric cells
+  output$t_sc <- renderDT(datatable(sc_table(), rownames = FALSE, style = "default", class = "compact stripe hover", extensions = "Buttons",
+                                    options = list(pageLength = 10, dom = "Bfrtip", buttons = dt_buttons(gene(), "single_cell_per_sample"))) |>
+                            formatRound("n_cells", 0, mark = "") |> formatRound(c("mean_cp10k", "avg_expr"), 3, mark = "") |> formatRound("frac", 4, mark = ""), server = FALSE)
+  output$t_cptac <- renderDT(datatable(cptac_table(), rownames = FALSE, style = "default", class = "compact stripe hover", extensions = "Buttons", options = list(pageLength = 10, dom = "Bfrtip", buttons = dt_buttons(gene(), "CPTAC_tumour_vs_normal"))) |>
+                               formatRound(c("normal", "tumour", "diff"), 3, mark = ""), server = FALSE)
 
   # downloads: figure(s) + underlying data
   fname <- function(stub, ext) function() paste0(gene(), "_", stub, "_", format(Sys.Date()), ".", ext)
