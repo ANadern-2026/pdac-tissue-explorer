@@ -38,6 +38,6 @@ STUDY_CITATION <- c(
 
 DATA_DIR <- Sys.getenv("PDACX_DATA_DIR", "data")
 REPO_URL <- "https://github.com/ANadern-2026/pdac-tissue-explorer"
-APP_URL  <- "https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/"   # Posit Connect Cloud
+APP_URL  <- "https://pdac.biointeract.space/"   # self-hosted (deploy/server/)
 AUTHOR   <- "Ali Nadernezhad (Leibniz-Institut für Polymerforschung Dresden)"
 ORCID    <- "https://orcid.org/0000-0002-3761-1601"

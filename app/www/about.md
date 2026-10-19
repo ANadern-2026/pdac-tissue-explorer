@@ -34,7 +34,7 @@ If you use this resource, please cite it — Nadernezhad A., *PDAC Tissue Explor
 
 ## Author
 
-Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden e.V. ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601)). Source code: <https://github.com/ANadern-2026/pdac-tissue-explorer>. Live app: <https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/>.
+Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden e.V. ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601)). Source code: <https://github.com/ANadern-2026/pdac-tissue-explorer>. Live app: <https://pdac.biointeract.space/>.
 
 ## Development
 

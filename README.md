@@ -4,7 +4,7 @@
 
 An interactive web app for exploring where any human gene is expressed in pancreatic ductal adenocarcinoma (PDAC) tissue: in tumour versus matched normal tissue, versus healthy pancreas, in which cell types, across tissue states (healthy donor, adjacent normal, primary tumour, liver metastasis, treated tumour) and in published fibroblast and tumour-cell subtypes. It combines three public datasets and needs no programming: type a gene, read the summary, download the figures and the numbers.
 
-**Live app:** <https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/> · **Code:** [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879) · **Data:** [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
+**Live app:** <https://pdac.biointeract.space/> · **Code:** [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879) · **Data:** [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
 
 ## What you can do
 

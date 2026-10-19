@@ -22,7 +22,7 @@ identifiers:
     description: "Processed data files (dataset)"
 license: MIT
 repository-code: "https://github.com/ANadern-2026/pdac-tissue-explorer"
-url: "https://anadern-2026-pdac-tissue-explorer.share.connect.posit.cloud/"
+url: "https://pdac.biointeract.space/"
 keywords: [pancreatic cancer, PDAC, single-cell RNA-seq, proteomics, CPTAC, TCGA, GTEx, Shiny]
 references:
   - type: article
