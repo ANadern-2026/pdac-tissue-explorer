@@ -46,7 +46,10 @@ note <- function(...) p(class = "note", ...)
 # ---- UI ------------------------------------------------------------------------------------------------------
 ui <- page_navbar(
   title = span(APP_TITLE, span(class = "badge-version", paste0("v", APP_VERSION))), theme = theme_app, id = "nav", fillable = FALSE,
-  header = tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE)),
+  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE)),
+                   if (length(MOVED_TO)) div(class = "moved-banner", strong("This app has moved: "),
+                                             a(href = MOVED_TO[1], target = "_top", sub("/$", "", sub("^https?://", "", MOVED_TO[1]))),
+                                             if (length(MOVED_TO) > 1) span(" ", MOVED_TO[2]))),
   nav_panel("Explore a gene", value = "gene",
     layout_sidebar(
       sidebar = sidebar(width = 300,
@@ -101,6 +104,13 @@ ui <- page_navbar(
 
 # ---- server --------------------------------------------------------------------------------------------------
 server <- function(input, output, session) {
+  if (length(MOVED_TO)) showModal(modalDialog(
+    title = paste(APP_TITLE, "has moved"), easyClose = TRUE,
+    p("The app now runs at its permanent address:"),
+    p(a(href = MOVED_TO[1], target = "_top", style = "font-size: 1.15rem; font-weight: 600;", sub("/$", "", sub("^https?://", "", MOVED_TO[1])))),
+    if (length(MOVED_TO) > 1) p(MOVED_TO[2]),
+    p(class = "note", "Same content and data; please update your bookmarks."),
+    footer = tagList(modalButton("Continue here"), a(class = "btn btn-primary", href = MOVED_TO[1], target = "_top", "Go to the new address"))))
   gene_df <- data.frame(value = D$genes$symbol, label = D$genes$symbol, name = ifelse(is.na(D$genes$name), "", D$genes$name),
                         aliases = D$genes$aliases, stringsAsFactors = FALSE)
   updateSelectizeInput(session, "gene", choices = gene_df, selected = DEFAULT_GENE, server = TRUE,

@@ -41,3 +41,6 @@ REPO_URL <- "https://github.com/ANadern-2026/pdac-tissue-explorer"
 APP_URL  <- "https://pdac.biointeract.space/"   # self-hosted (deploy/server/)
 AUTHOR   <- "Ali Nadernezhad (Leibniz-Institut für Polymerforschung Dresden)"
 ORCID    <- "https://orcid.org/0000-0002-3761-1601"
+# Relocation notice: only when a file MOVED_TO sits next to app.R (written by deploy/connect-cloud/deploy.R for the
+# old Connect Cloud address). Line 1 = new address; line 2 (optional) = extra sentence. Absent everywhere else.
+MOVED_TO <- if (file.exists("MOVED_TO")) trimws(readLines("MOVED_TO", warn = FALSE)) else character(0)

@@ -16,3 +16,5 @@ body { background: #fcfcfb; }
 .opt-name { color: #52514e; font-size: 0.85em; }
 .opt-alias { color: #8a8984; font-size: 0.78em; }
 .about { max-width: 860px; }
+.moved-banner { background: #fff4e5; border: 1px solid #f3c58a; color: #5c3b0b; border-radius: 6px; padding: 0.55rem 0.9rem; margin: 0.75rem 0 0.25rem 0; font-size: 0.92rem; }
+.moved-banner a { font-weight: 600; }

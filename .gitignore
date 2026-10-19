@@ -14,3 +14,5 @@ rsconnect/
 .DS_Store
 # server-specific settings (IP address, domain, e-mail)
 deploy/server/.env
+# relocation notice for the old Connect Cloud address (written by deploy/connect-cloud/deploy.R)
+app/MOVED_TO

@@ -38,7 +38,7 @@ data-raw/            data preparation, run in order:
   04_gene_index.R          searchable gene index, symbol reconciliation across datasets
   logs/                    provenance logs (input checksums, counts, session info)
 tests/               testthat tests: pipeline on a miniature atlas, app statistics
-deploy/connect-cloud/deploy.R   publishing to Posit Connect Cloud (free hosting)
+deploy/connect-cloud/           legacy Connect Cloud address: relocation notice (deploy.R), later a forwarding page (retire.R)
 deploy/docker/Dockerfile        minimal container for local use
 deploy/server/                  self-hosting on a server: Docker Compose + Caddy (HTTPS), see its README
 ```

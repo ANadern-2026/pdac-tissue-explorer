@@ -1,4 +1,4 @@
-# ---- Deploy the PDAC Tissue Explorer to Posit Connect Cloud ------------------------------------------------
+# ---- Deploy the PDAC Tissue Explorer to Posit Connect Cloud (legacy address; see also retire.R) ------------
 # Free plan: public apps, 4 GB RAM, 1 CPU; uploads from R up to 1 GiB (this app: ~240 MB).
 # The data files are not in Git, so the app is published from R (not from the GitHub repository).
 # Run from the repository root (the folder that contains app/ and deploy/), e.g. in RStudio.
@@ -19,10 +19,17 @@ if (length(missing)) stop("Missing in app/data/: ", paste(missing, collapse = ",
 if (!nrow(rsconnect::accounts()) || !any(grepl("posit\\.cloud", rsconnect::accounts()$server)))
   rsconnect::connectCloudUser()
 
-# 4. publish exactly the app files (app.R, R/, www/, data/); re-run this line to publish an update
+# 4. relocation notice: the app's permanent home is now https://pdac.biointeract.space/ (deploy/server/).
+#    With MOVED_TO set, this copy shows a banner and a dialog pointing there. Set MOVED_TO <- "" to publish without it.
+MOVED_TO   <- "https://pdac.biointeract.space/"
+MOVED_NOTE <- "This old address will stop working in November 2026."
+if (nzchar(MOVED_TO)) writeLines(c(MOVED_TO, MOVED_NOTE), file.path("app", "MOVED_TO"))   # removed again after publishing
+
+# 5. publish exactly the app files (app.R, R/, www/, data/, MOVED_TO); re-run to publish an update
 app_files <- list.files("app", recursive = TRUE)
 app_files <- app_files[!grepl("(^|/)(\\.|rsconnect/)", app_files)]
 rsconnect::deployApp(appDir = "app", appFiles = app_files, appTitle = "PDAC Tissue Explorer", launch.browser = TRUE)
+if (nzchar(MOVED_TO)) unlink(file.path("app", "MOVED_TO"))
 
 # After the first publish, in the Connect Cloud web page of the app:
 #   - Settings > Sharing: make sure access is "Public".
