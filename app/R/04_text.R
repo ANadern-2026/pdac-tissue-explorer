@@ -14,6 +14,22 @@ txt_cptac <- function(p, s, symbol, assay) {
          fmt_signed(s$median_diff), " log2 units", if (isTRUE(s$p < 0.05)) fold_txt(s$median_diff) else "", " (paired Wilcoxon p = ", fmt_p(s$p), ").", cov)
 }
 
+# tab: phospho_table() of site abundance (with or without CI); rel: the same relative to protein (NULL if no protein)
+txt_phospho <- function(tab, rel, symbol, n_patients) {
+  if (is.null(tab)) return(paste0("Phosphosites (CPTAC): no ", symbol, " phosphosites were quantified."))
+  tt <- tab[!is.na(tab$p), ]
+  head <- paste0("Phosphosites (CPTAC, ", n_patients, " patients): ", nrow(tab), " site", if (nrow(tab) != 1) "s", " quantified")
+  if (!nrow(tt)) return(paste0(head, ", none in at least ", PHOSPHO_MIN_PAIRS, " matched tumour/normal pairs, too few to compare."))
+  cnt <- function(t) c(up = sum(t$q < 0.05 & t$median_diff > 0, na.rm = TRUE), down = sum(t$q < 0.05 & t$median_diff < 0, na.rm = TRUE))
+  a <- cnt(tt); big <- tt[tt$q < 0.05, ]; big <- big[which.max(abs(big$median_diff)), ]
+  out <- paste0(head, "; ", nrow(tt), " compared in at least ", PHOSPHO_MIN_PAIRS, " matched pairs: ", a[["up"]], " higher and ", a[["down"]],
+                " lower in tumour (paired Wilcoxon, false discovery rate < 5% within the gene)",
+                if (nrow(big)) paste0("; largest change at ", big$label, " (median ", fmt_signed(big$median_diff), " log2 units)") else "", ".")
+  if (is.null(rel)) return(paste0(out, " The protein itself was not quantified, so these changes cannot be separated from changes in protein abundance."))
+  r <- cnt(rel[!is.na(rel$p), ])
+  paste0(out, " Relative to the protein level (phosphorylation beyond the change in protein abundance): ", r[["up"]], " higher and ", r[["down"]], " lower.")
+}
+
 txt_bulk <- function(b, symbol) {
   if (is.null(b)) return(paste0("Bulk RNA (TCGA/GTEx): ", symbol, " is not in this table (not expressed at TPM >= 1 in at least 10% of any cohort)."))
   pd <- b$value[b$cohort == "PDAC (TCGA)"]; gx <- b$value[b$cohort == "Healthy pancreas (GTEx)"]; an <- b$value[b$cohort == "Adjacent normal (TCGA)"]
@@ -47,6 +63,24 @@ txt_state <- function(v, symbol) {
   word <- function(t, a, b) if (!isTRUE(t$ok)) paste0(a, " vs ", b, ": too few samples") else
     paste0(a, " vs ", b, ": ", if (!isTRUE(t$p < 0.05)) "no clear difference" else if (t$diff > 0) "higher" else "lower", " (median ", fmt_num(t$median_x), " vs ", fmt_num(t$median_y), ", p = ", fmt_p(t$p), ", ", t$n_x, " vs ", t$n_y, " samples)")
   paste0("Within ", prose(topc), " (the main ", symbol, "-carrying cells): ", word(a, "primary tumour", "adjacent normal"), "; ", word(m, "liver metastasis", "primary tumour"), ".")
+}
+
+# ---- links out ------------------------------------------------------------------------------------------------
+# One entry per external resource: label, hint (tooltip) and URL. Direct pages use the Entrez or Ensembl ID when
+# known (gene_xrefs.rds), otherwise a search for the symbol. Protein resources are left out for genes known to be
+# non-coding.
+gene_links <- function(gr) {
+  sym <- sub(" \\(.*\\)$", "", gr$symbol)                          # duplicated symbols carry a " (Entrez ...)" suffix
+  q <- utils::URLencode(sym, reserved = TRUE)
+  ens <- if ("ensembl" %in% names(gr)) gr$ensembl else NA_character_
+  type <- if ("gene_type" %in% names(gr)) gr$gene_type else NA_character_
+  coding <- is.na(type) || type == "protein-coding"
+  url <- function(k, id = NA_character_) { L <- LINKS_OUT[[k]]
+    if (!is.na(id) && !is.null(L$id)) sprintf(L$id, utils::URLencode(id, reserved = TRUE)) else sprintf(L$search, q) }
+  keep <- c(ncbi = TRUE, uniprot = coding, hpa = coding, opentargets = TRUE, depmap = TRUE)
+  ids <- c(ncbi = gr$entrez, uniprot = NA, hpa = ens, opentargets = ens, depmap = NA)
+  out <- lapply(names(LINKS_OUT)[keep[names(LINKS_OUT)]], function(k) list(key = k, label = LINKS_OUT[[k]]$label, hint = LINKS_OUT[[k]]$hint, url = url(k, ids[[k]])))
+  stats::setNames(out, vapply(out, `[[`, "", "key"))
 }
 
 # ---- multi-gene tables ----------------------------------------------------------------------------------------

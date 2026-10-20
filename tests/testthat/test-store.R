@@ -48,7 +48,7 @@ suppressMessages(build_store(tmp, log = FALSE))
 D <- load_app_data(tmp)
 
 test_that("store files are built and the large tables are not held in memory", {
-  expect_true(all(file.exists(file.path(tmp, STORE_LAYERS))))
+  expect_true(all(file.exists(file.path(tmp, STORE_LAYERS[c("cptac", "bulk", "sc")]))))
   expect_true(is.environment(D$sc) && is.environment(D$cptac) && is.environment(D$bulk))
   expect_null(D$sc_mean); expect_null(D$umap$expr)
   expect_identical(D$sc_groups, prepare_sc_groups(src$groups))
@@ -91,6 +91,45 @@ test_that("codecs are exact and the record cache stays within its budget", {
   expect_lte(sum(.store_cache$bytes), 0.01 * 2^20 + max(.store_cache$bytes)); expect_true(length(.store_cache$keys) >= 1)
   expect_identical(umap_values(D, "MSLN"), as.numeric(src$umap$expr[, "MSLN"]))  # evicted records are read again correctly
   STORE_CACHE_MB <<- old; store_cache_clear()
+})
+
+test_that("the optional phosphosite layer is skipped without its source, then built and read exactly", {
+  expect_false(D$has_phospho); expect_null(phospho_sites(D, "MSLN"))
+  set.seed(12)
+  sites <- data.frame(site_id = c("NP_000001.1_S5", "NP_000001.1_T12", "NP_000001.1_S100", "NP_000002.1_S10", "NP_000002.1_Y3", "NP_000003.1_S7", "NP_000009.1_S1"),
+                      gene = c("MSLN", "MSLN", "MSLN", "KRT19", "KRT19", "K19OLD", "NOGENE"), stringsAsFactors = FALSE)
+  sites$refseq <- sub("_[STY][0-9]+$", "", sites$site_id); sites$residue <- substr(sub("^.*_", "", sites$site_id), 1, 1)
+  sites$position <- as.integer(sub("^.*_[STY]", "", sites$site_id)); sites$peptide <- "PEPsTIDE"
+  o <- order(sites$gene, sites$refseq, sites$position); sites <- sites[o, ]; rownames(sites) <- NULL
+  tc <- colnames(src$cptac$protein_tumor); nc <- colnames(src$cptac$protein_normal)
+  mk <- function(cols) { m <- matrix(round(rnorm(nrow(sites) * length(cols), 20, 2), 3), nrow(sites), dimnames = list(sites$site_id, cols)); m[runif(length(m)) < 0.25] <- NA; m }
+  ph_src <- list(sites = sites, phospho_tumor = mk(rev(tc)), phospho_normal = mk(nc), source = list(note = "synthetic"))   # sample order differs from protein
+  saveRDS(ph_src, file.path(tmp, "cptac_phospho.rds"))
+  g <- readRDS(file.path(tmp, "genes.rds")); g$genes$aliases[g$genes$symbol == "KRT19"] <- "K19OLD, CK19"; saveRDS(g, file.path(tmp, "genes.rds"))
+  msg <- capture_messages(build_store(tmp, layers = "phospho", log = FALSE))
+  expect_true(any(grepl("not linked: NOGENE", msg))); expect_true(any(grepl("combined: K19OLD \\+ KRT19", msg)))
+  D2 <- load_app_data(tmp); on.exit(close_app_data(D2))
+  expect_true(D2$has_phospho)
+  ph <- phospho_sites(D2, "KRT19")
+  expect_identical(ph$sites$site_id, c("NP_000002.1_Y3", "NP_000002.1_S10", "NP_000003.1_S7"))           # isoform with most sites first, then position
+  expect_identical(ph$sites$label, c("Y3 (NP_000002.1)", "S10 (NP_000002.1)", "S7 (NP_000003.1)"))
+  expect_identical(ph$sites$source_symbol, c("KRT19", "KRT19", "K19OLD"))
+  expect_identical(unname(ph$tumor), unname(ph_src$phospho_tumor[ph$sites$site_id, ])); expect_identical(colnames(ph$tumor), rev(tc))
+  expect_identical(unname(ph$normal), unname(ph_src$phospho_normal[ph$sites$site_id, ]))
+  pt <- src$cptac$protein_tumor["KRT19", ]; pn <- src$cptac$protein_normal["KRT19", ]
+  expect_identical(ph$prot_tumor, unname(pt[rev(tc)])); expect_identical(ph$prot_normal, unname(pn[nc]))
+  t <- ph_src$phospho_tumor["NP_000002.1_S10", ] - pt[names(ph_src$phospho_tumor["NP_000002.1_S10", ])]
+  n <- ph_src$phospho_normal["NP_000002.1_S10", ] - pn[nc]
+  ids <- intersect(names(t), names(n)); ok <- ids[is.finite(t[ids]) & is.finite(n[ids])]
+  expect_identical(phospho_pairs(ph, 2, relative = TRUE), data.frame(case_id = ok, normal = unname(n[ok]), tumour = unname(t[ok]), diff = unname(t[ok] - n[ok])))
+  expect_identical(phospho_sites(D2, "MSLN")$sites$label, c("S5", "T12", "S100"))
+  expect_null(phospho_sites(D2, "COL1A1"))
+  tab <- phospho_table(ph, min_pairs = 3)
+  expect_identical(tab$n_pairs, vapply(1:3, function(k) nrow(phospho_pairs(ph, k)), integer(1)))
+  expect_identical(tab$q, p.adjust(tab$p, "BH"))
+  # the builder keeps an existing phospho.sqlite when its source is absent (server installs without the pipeline tables)
+  file.remove(file.path(tmp, "cptac_phospho.rds"))
+  msg <- capture_messages(build_store(tmp, layers = "phospho", log = FALSE)); expect_true(any(grepl("existing phospho.sqlite kept", msg)))
 })
 
 test_that("the builder skips up-to-date layers and the app refuses stores of another format", {

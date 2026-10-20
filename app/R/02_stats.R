@@ -1,17 +1,22 @@
 # ---- statistics computed on the fly --------------------------------------------------------------------
+# Same resamples and result as replicate(n, median(sample(x, replace = TRUE))) after set.seed(seed) (v0.1), but
+# vectorised: all resamples drawn at once (identical random stream), medians from column-wise sorted values.
 boot_median_ci <- function(x, n = BOOT_N, seed = 1L) {
   if (length(x) < 3) return(c(NA_real_, NA_real_))
-  set.seed(seed); b <- replicate(n, stats::median(sample(x, replace = TRUE)))
+  set.seed(seed); k <- length(x)
+  m <- matrix(sample(x, k * n, replace = TRUE), k)
+  m <- matrix(m[order(col(m), m)], k)
+  b <- (m[(k + 1L) %/% 2L, ] + m[k %/% 2L + 1L, ]) / 2
   unname(stats::quantile(b, c(0.025, 0.975)))
 }
 
 # paired tumour vs normal (CPTAC)
-paired_stats <- function(p) {
-  if (is.null(p) || nrow(p$pairs) < 5) return(list(n = if (is.null(p)) 0L else nrow(p$pairs), ok = FALSE))
+paired_stats <- function(p, min_n = 5L, ci = TRUE) {
+  if (is.null(p) || nrow(p$pairs) < min_n) return(list(n = if (is.null(p)) 0L else nrow(p$pairs), ok = FALSE))
   d <- p$pairs$diff; nz <- d[d != 0]
   exact <- length(nz) < 50 && !anyDuplicated(abs(nz))
   pv <- suppressWarnings(stats::wilcox.test(p$pairs$tumour, p$pairs$normal, paired = TRUE, exact = exact)$p.value)
-  ci <- boot_median_ci(d)
+  ci <- if (ci) boot_median_ci(d) else c(NA_real_, NA_real_)
   list(ok = TRUE, n = length(d), median_diff = stats::median(d), ci_low = ci[1], ci_high = ci[2], p = pv,
        n_up = sum(d > 0), n_down = sum(d < 0), median_normal = stats::median(p$pairs$normal), median_tumour = stats::median(p$pairs$tumour))
 }
@@ -44,4 +49,22 @@ celltype_summary <- function(v, state = "Primary tumour", min_cells = MIN_CELLS)
   names(out)[names(out) == "avg_expr"] <- "median_avg_expr"; names(out)[names(out) == "frac"] <- "median_frac"
   out$compartment <- factor(out$compartment, levels = CELLTYPE_ORDER)
   list(per_sample = ps, summary = out[order(out$compartment), ])
+}
+
+# Phosphosites of one gene: one row per site with the paired tumour vs normal comparison (sites quantified in at least
+# min_pairs patients) and Benjamini-Hochberg adjusted p-values across the compared sites of this gene.
+# relative = TRUE compares site minus protein level, i.e. phosphorylation beyond the change in protein abundance.
+phospho_table <- function(ph, relative = FALSE, min_pairs = PHOSPHO_MIN_PAIRS, ci = TRUE) {
+  if (is.null(ph)) return(NULL)
+  rows <- lapply(seq_len(nrow(ph$sites)), function(k) {
+    pr <- phospho_pairs(ph, k, relative); s <- paired_stats(list(pairs = pr), min_n = min_pairs, ci = ci)
+    data.frame(n_pairs = nrow(pr), median_normal = if (s$ok) s$median_normal else NA_real_, median_tumour = if (s$ok) s$median_tumour else NA_real_,
+               median_diff = if (s$ok) s$median_diff else NA_real_, ci_low = if (s$ok) s$ci_low else NA_real_, ci_high = if (s$ok) s$ci_high else NA_real_,
+               p = if (s$ok) s$p else NA_real_, n_up = if (s$ok) s$n_up else NA_integer_, n_down = if (s$ok) s$n_down else NA_integer_)
+  })
+  tab <- data.frame(ph$sites[, c("label", "site_id", "residue", "position", "refseq", "source_symbol", "peptide")],
+                    n_tumours = rowSums(is.finite(ph$tumor)), do.call(rbind, rows), stringsAsFactors = FALSE)
+  tab$q <- stats::p.adjust(tab$p, "BH")      # NA p-values (sites not compared) are not counted
+  tab$values <- if (relative) "relative to protein" else "site abundance"
+  tab
 }

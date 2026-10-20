@@ -7,9 +7,12 @@
 #   bulk.sqlite   table  log2tpm_x1000      record = integer vector over samples
 #   sc.sqlite     table  expr               record = list(mean = mean CP10k x100, frac = fraction x10000) over groups
 #                 table  umap               record = log1p(CP10k) of the atlas-map subsample (sparse, 2 decimals)
+#   phospho.sqlite table  site               record = list(site, peptide, tumor, normal): all phosphosites of one gene
+#                                            (values flattened site-major-by-column, i.e. as.vector() of the sites x samples matrix)
+#                                            optional layer (02b); info$gene_map links index symbols to phospho symbols
 # Small tables (sample metadata, column names, single-cell groups, UMAP coordinates) go into each file's
 # `info` table. Every record is decoded again after writing and compared with the source (identical()).
-# Run from the repository root after 01-04:  source("data-raw/05_build_store.R")
+# Run from the repository root after 01-04 (and 02b):  source("data-raw/05_build_store.R")
 # get_data.R calls build_store() itself. Peak memory ~2 GB (single-cell layer); ~6 min.
 # =====================================================================================================
 suppressPackageStartupMessages({ library(Matrix); library(DBI); library(RSQLite) })
@@ -147,6 +150,46 @@ build_sc <- function(dir, say) {      # one large matrix in memory at a time (pe
   out
 }
 
+# phosphosite symbols -> gene index: the CPTAC RNA/protein symbol of the same release first, then the official
+# symbol, then an unambiguous alias. Returns data.frame(symbol = index symbol, sym_cptac_phospho); an index gene can have
+# several phospho symbols (e.g. a retired symbol for another protein isoform), whose sites the app shows together.
+phospho_gene_map <- function(sym, genes) {
+  i <- match(sym, genes$sym_cptac_rna)
+  j <- is.na(i); i[j] <- match(sym[j], genes$sym_cptac_protein)
+  j <- is.na(i); i[j] <- match(sym[j], genes$symbol)
+  j <- is.na(i)
+  if (any(j)) {
+    al <- strsplit(genes$aliases, ", ", fixed = TRUE); a <- unlist(al); ix <- rep(seq_along(al), lengths(al))
+    k <- match(sym[j], a); k[sym[j] %in% a[duplicated(a)]] <- NA; i[j] <- ix[k]
+  }
+  m <- data.frame(symbol = genes$symbol[i], sym_cptac_phospho = sym, stringsAsFactors = FALSE)
+  m <- m[!is.na(m$symbol), , drop = FALSE]; rownames(m) <- NULL; m
+}
+
+build_phospho <- function(dir, say) {
+  src <- file.path(dir, "cptac_phospho.rds"); x <- readRDS(src); out <- file.path(dir, STORE_LAYERS[["phospho"]])
+  sites <- x$sites; tu <- x$phospho_tumor; no <- x$phospho_normal
+  check_ids(sites$site_id, "phospho sites")
+  if (!identical(rownames(tu), sites$site_id) || !identical(rownames(no), sites$site_id)) stop("cptac_phospho.rds: site rows differ between tables")
+  genes <- readRDS(file.path(dir, "genes.rds"))$genes
+  rows <- split(seq_len(nrow(sites)), factor(sites$gene, levels = unique(sites$gene))); ids <- names(rows)
+  map <- phospho_gene_map(ids, genes)
+  dup <- map[map$symbol %in% map$symbol[duplicated(map$symbol)], ]
+  say("phospho: ", length(ids), " gene symbols with sites, ", nrow(map), " linked to ", length(unique(map$symbol)), " index genes",
+      if (length(un <- setdiff(ids, map$sym_cptac_phospho))) paste0("; not linked: ", paste(un, collapse = ", ")) else "",
+      if (nrow(dup)) paste0("; combined: ", paste(tapply(dup$sym_cptac_phospho, dup$symbol, paste, collapse = " + "), collapse = ", ")) else "")
+  rec <- function(k) { r <- rows[[k]]
+    list(site = sites$site_id[r], peptide = sites$peptide[r], tumor = as.vector(unname(tu[r, , drop = FALSE])), normal = as.vector(unname(no[r, , drop = FALSE]))) }
+  s <- store_create(out, "phospho", c(site = "rds-gzip"),
+                    list(colnames = list(phospho_tumor = colnames(tu), phospho_normal = colnames(no)), gene_map = map, n_sites = nrow(sites),
+                         source = x$source, source_md5 = unname(tools::md5sum(src)), genes_md5 = unname(tools::md5sum(file.path(dir, "genes.rds")))))
+  for (k in chunks(length(ids))) store_write(s, "site", ids[k], lapply(k, function(j) pack_rds(rec(j), "gzip")))
+  store_finish(s)
+  say("phospho.sqlite/site: ", verify_table(s$part, "site", ids, rec), " genes (", nrow(sites), " sites) verified")
+  store_publish(s)
+  out
+}
+
 # every gene of the search index must have a record under its dataset symbol
 check_index <- function(dir, say) {
   g <- readRDS(file.path(dir, "genes.rds"))$genes
@@ -158,28 +201,37 @@ check_index <- function(dir, say) {
     miss <- setdiff(stats::na.omit(g[[n[[3]]]]), store_ids(st, n[[2]])); store_close(st)
     if (length(miss)) stop("gene index: ", length(miss), " ", n[[3]], " symbols have no record in ", basename(path), "/", n[[2]], " (e.g. ", miss[1], ")")
   }
+  path <- file.path(dir, STORE_LAYERS[["phospho"]])
+  if (file.exists(path)) {
+    st <- store_open(path); map <- st$info$gene_map; ids <- store_ids(st, "site"); store_close(st)
+    if (!all(map$symbol %in% g$symbol)) stop("phospho.sqlite: gene map refers to symbols missing from genes.rds; rebuild the phospho layer")
+    if (!all(map$sym_cptac_phospho %in% ids)) stop("phospho.sqlite: gene map refers to genes without a record")
+  }
   say("gene index: all ", nrow(g), " genes resolve to stored records")
 }
 
-# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc". Layers whose store file is newer than
-# its source .rds files are skipped unless force = TRUE.
-build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc"), force = FALSE, log = TRUE) {
+# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho". Layers whose store file is newer
+# than its source .rds files are skipped unless force = TRUE. The single-cell and phosphosite layers are optional: without
+# their source files they are skipped (an existing store file is kept).
+build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho"), force = FALSE, log = TRUE) {
   log_file <- NULL
   if (log && file.exists(file.path("data-raw", "helpers.R")) && file.access("data-raw", 2) == 0) {
     source(file.path("data-raw", "helpers.R"), local = TRUE); log_file <- start_log("05_build_store")
   }
   say <- function(...) if (is.null(log_file)) message(...) else logc(log_file, ...)
-  srcs <- list(cptac = "cptac.rds", bulk = "bulk_tcga_gtex.rds", sc = c("sc_groups.rds", "sc_expr.rds", "sc_umap.rds"))
+  srcs <- list(cptac = "cptac.rds", bulk = "bulk_tcga_gtex.rds", sc = c("sc_groups.rds", "sc_expr.rds", "sc_umap.rds"), phospho = c("cptac_phospho.rds", "genes.rds"))
   for (l in layers) {
     out <- file.path(dir, STORE_LAYERS[[l]]); src <- file.path(dir, srcs[[l]]); src <- src[file.exists(src)]
     if (l == "sc" && !all(file.exists(file.path(dir, c("sc_groups.rds", "sc_expr.rds"))))) { say("sc: source files not found, skipped"); next }
+    if (l == "phospho" && !all(file.exists(file.path(dir, srcs$phospho)))) {
+      say("phospho: source files not found, skipped", if (file.exists(out)) " (existing phospho.sqlite kept)" else ""); next }
     if (!length(src)) stop(l, ": source file(s) not found in ", dir)
     if (!force && file.exists(out) && all(file.mtime(out) > file.mtime(src))) {
       ok <- tryCatch({ st <- store_open(out); store_close(st); TRUE }, error = function(e) FALSE)
       if (ok) { say(basename(out), ": up to date, skipped"); next }
     }
     t0 <- Sys.time(); say(l, ": building ", basename(out), " from ", paste(basename(src), collapse = ", "), " ...")
-    switch(l, cptac = build_cptac(dir, say), bulk = build_bulk(dir, say), sc = build_sc(dir, say))
+    switch(l, cptac = build_cptac(dir, say), bulk = build_bulk(dir, say), sc = build_sc(dir, say), phospho = build_phospho(dir, say))
     invisible(gc())
     say(basename(out), ": ", round(file.size(out) / 2^20, 1), " MB, MD5 ", unname(tools::md5sum(out)), ", ", round(as.numeric(Sys.time() - t0, units = "mins"), 1), " min")
   }

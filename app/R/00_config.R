@@ -3,6 +3,8 @@ APP_TITLE   <- "PDAC Tissue Explorer"
 APP_VERSION <- "0.1.0"
 MIN_CELLS   <- 20L          # a sample contributes to a cell-type summary only with >= this many cells of that type
 BOOT_N      <- 1000L        # bootstrap resamples for confidence intervals of median changes
+PHOSPHO_MIN_PAIRS <- 10L    # a phosphosite is compared only if quantified in tumour and normal tissue of >= this many patients
+PHOSPHO_MAX_PLOT  <- 50L    # the site overview plot shows at most this many sites (those with the smallest p-values)
 
 # validated categorical palette (dataviz reference instance, light mode); fixed order, never cycled
 STATE_LEVELS <- c("Healthy donor", "Adjacent normal", "Primary tumour", "Liver metastasis", "Primary tumour (treated)")
@@ -35,6 +37,19 @@ STUDY_CITATION <- c(
   GSE158356 = "Kemp et al., Life Sci Alliance 2021", GSE194247 = "Unpublished at atlas release", GSE202051 = "Shiau et al., Front Oncol 2022",
   GSE205013 = "Werba et al., Nat Commun 2023", GSE211644 = "Schalck et al., Cancer Discov 2022", GSE229413 = "Carpenter et al., Cancer Discov 2023",
   EGAS00001002543 = "Chan-Seng-Yue et al., Nat Genet 2020", phs001840.v1.p1 = "Elyada et al., Cancer Discov 2019", PRJCA001063 = "Peng et al., Cell Res 2019")
+
+# links out on the gene page (gene_links() in 04_text.R): direct pages when the identifier is known, otherwise a search
+LINKS_OUT <- list(
+  ncbi = list(label = "NCBI Gene", hint = "Gene summary, function and literature (NCBI)",
+              id = "https://www.ncbi.nlm.nih.gov/gene/%s", search = "https://www.ncbi.nlm.nih.gov/gene/?term=%s%%5Bsym%%5D+AND+human%%5Borgn%%5D"),
+  uniprot = list(label = "UniProt", hint = "Protein function, domains, sites and isoforms (UniProt, reviewed human entries)",
+                 search = "https://www.uniprot.org/uniprotkb?query=gene_exact%%3A%s+AND+organism_id%%3A9606+AND+reviewed%%3Atrue"),
+  hpa = list(label = "Human Protein Atlas", hint = "Protein localisation in tissues, cells and cancers (antibody staining)",
+             id = "https://www.proteinatlas.org/%s", search = "https://www.proteinatlas.org/search/%s"),
+  opentargets = list(label = "Open Targets", hint = "Disease associations, genetics, drugs and tractability",
+                     id = "https://platform.opentargets.org/target/%s", search = "https://platform.opentargets.org/search?q=%s"),
+  depmap = list(label = "DepMap", hint = "Cancer cell-line dependency (CRISPR) and expression",
+                search = "https://depmap.org/portal/gene/%s?tab=overview"))
 
 DATA_DIR <- Sys.getenv("PDACX_DATA_DIR", "data")
 REPO_URL <- "https://github.com/ANadern-2026/pdac-tissue-explorer"

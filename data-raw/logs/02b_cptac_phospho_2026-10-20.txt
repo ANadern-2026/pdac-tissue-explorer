@@ -1,0 +1,31 @@
+02b_cptac_phospho started 2026-10-20 14:45:04 UTC
+source clinical_table_140.tsv MD5 c3c71f5e62060004ab8992693a6dea17 (65283 bytes) 
+source phosphoproteomics_site_level_MD_abundance_tumor.cct MD5 839642211b583b3f4d900d023b06f977 (60060117 bytes) 
+source phosphoproteomics_site_level_MD_abundance_normal.cct MD5 bd10bad1a7822979841569d4afda4829 (33506962 bytes) 
+tumour: 329 -Inf values (in 210 sites) set to NA 
+normal: 628 -Inf values (in 418 sites) set to NA 
+phospho_tumor: 50335 sites x 135 samples | phospho_normal: 64 samples | pairs: 64 
+genes: 7783 | residues: S = 42565, T = 6873, Y = 897 | sites quantified in >= 10 pairs: 30750 | median pairs per site: 16 
+samples identical to the protein data in cptac.rds: TRUE 
+wrote app/data/cptac_phospho.rds (10.2 MB) 
+finished 2026-10-20 14:46:41 UTC
+
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26200)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+loaded via a namespace (and not attached):
+[1] compiler_4.4.1 tools_4.4.1   

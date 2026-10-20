@@ -9,7 +9,7 @@ suppressPackageStartupMessages({ library(DBI); library(RSQLite) })
 
 STORE_FORMAT  <- 1L      # bump when the on-disk layout changes (05_build_store.R writes the same constant)
 STORE_INFO_CODEC <- "rds-gzip"
-STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite")
+STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite", phospho = "phospho.sqlite")   # sc, phospho: optional
 STORE_CACHE_MB <- 64     # memory budget of the per-gene record cache (shared by all sessions)
 
 # ---- record codecs (encoders are in data-raw/05_build_store.R) ----
@@ -101,6 +101,7 @@ load_app_data <- function(dir = DATA_DIR) {
          else "Run get_data.R from the repository root (or the scripts in data-raw/).")
   }
   d <- list(genes = readRDS(f("genes.rds"))$genes, dir = normalizePath(dir))
+  if (file.exists(f("gene_xrefs.rds"))) d$genes <- add_xrefs(d$genes, readRDS(f("gene_xrefs.rds"))$xrefs)   # optional (links out)
   d$cptac <- store_open(f(STORE_LAYERS[["cptac"]]))
   d$bulk  <- store_open(f(STORE_LAYERS[["bulk"]]))
   d$bulk_samples <- d$bulk$info$samples
@@ -116,11 +117,13 @@ load_app_data <- function(dir = DATA_DIR) {
       d$umap$meta$compartment <- compartment_of(d$umap$meta$cell_type, d$umap$meta$fine_group)
     }
   }
+  d$has_phospho <- file.exists(f(STORE_LAYERS[["phospho"]]))
+  if (d$has_phospho) { d$phospho <- store_open(f(STORE_LAYERS[["phospho"]])); d$phospho_map <- d$phospho$info$gene_map }
   d$choices <- stats::setNames(d$genes$symbol, ifelse(is.na(d$genes$name), d$genes$symbol, paste0(d$genes$symbol, " - ", d$genes$name)))
   d
 }
 
-close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
+close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
 
 compartment_of <- function(cell_type, fine_group) {
   key <- ifelse(cell_type == "DUCTAL", ifelse(fine_group %in% names(DUCTAL_GROUP), "TUMOUR_DUCTAL", "OTHER_DUCTAL"), cell_type)
@@ -142,6 +145,13 @@ prepare_sc_groups <- function(g) {
   g
 }
 
+# Ensembl ID and gene type (data-raw/04b_gene_xrefs.R) joined by symbol; used only where the Entrez ID agrees
+add_xrefs <- function(genes, x) {
+  i <- match(genes$symbol, x$symbol); ok <- !is.na(i) & (x$entrez[i] %in% genes$entrez | (is.na(x$entrez[i]) & is.na(genes$entrez)))
+  genes$ensembl <- ifelse(ok, x$ensembl[i], NA_character_); genes$gene_type <- ifelse(ok, x$gene_type[i], NA_character_)
+  genes
+}
+
 gene_row <- function(d, symbol) d$genes[match(symbol, d$genes$symbol), , drop = FALSE]
 
 # CPTAC paired values for one gene and assay ("protein" | "rna")
@@ -156,6 +166,43 @@ cptac_pairs <- function(d, symbol, assay = c("protein", "rna")) {
   tumours <- t[is.finite(t)]
   list(pairs = data.frame(case_id = ok, normal = unname(n[ok]), tumour = unname(t[ok]), diff = unname(t[ok] - n[ok])),
        n_tumours_measured = length(tumours), n_tumours_total = length(t), tumour_values = tumours, assay = assay, symbol_used = s)
+}
+
+# CPTAC phosphosites of one gene: sites x samples matrices (log2) for tumours and adjacent normals, the gene's protein
+# level aligned to the same samples (for values relative to protein), and one annotation row per site; NULL if none
+phospho_sites <- function(d, symbol) {
+  if (!isTRUE(d$has_phospho)) return(NULL)
+  ps <- d$phospho_map$sym_cptac_phospho[d$phospho_map$symbol %in% symbol]
+  recs <- lapply(ps, function(s) store_get(d$phospho, "site", s)); have <- !vapply(recs, is.null, logical(1))
+  ps <- ps[have]; recs <- recs[have]
+  if (!length(recs)) return(NULL)
+  cols <- d$phospho$info$colnames
+  mat <- function(part, cn) { m <- do.call(rbind, lapply(recs, function(r) matrix(r[[part]], nrow = length(r$site)))); dimnames(m) <- list(NULL, cn); m }
+  site_id <- unlist(lapply(recs, `[[`, "site"))
+  re <- "^((?:NP|XP)_[0-9]+\\.[0-9]+)_([STY])([0-9]+)$"
+  sites <- data.frame(site_id = site_id, refseq = sub(re, "\\1", site_id, perl = TRUE), residue = sub(re, "\\2", site_id, perl = TRUE),
+                      position = as.integer(sub(re, "\\3", site_id, perl = TRUE)), peptide = unlist(lapply(recs, `[[`, "peptide")),
+                      source_symbol = rep(ps, vapply(recs, function(r) length(r$site), integer(1))),
+                      stringsAsFactors = FALSE)
+  tu <- mat("tumor", cols$phospho_tumor); no <- mat("normal", cols$phospho_normal)
+  ref_n <- table(sites$refseq); main <- names(ref_n)[order(-ref_n, names(ref_n))]       # isoform with most sites first
+  o <- order(match(sites$refseq, main), sites$position, sites$residue); sites <- sites[o, ]; tu <- tu[o, , drop = FALSE]; no <- no[o, , drop = FALSE]
+  sites$label <- paste0(sites$residue, sites$position, if (length(main) > 1) paste0(" (", sites$refseq, ")") else "")
+  rownames(sites) <- NULL; rownames(tu) <- rownames(no) <- sites$label
+  ps_prot <- gene_row(d, symbol)$sym_cptac_protein
+  prot <- if (is.na(ps_prot)) NULL else store_get(d$cptac, "protein", ps_prot)
+  pcols <- d$cptac$info$colnames
+  align <- function(v, cn, target) if (is.null(v)) rep(NA_real_, length(target)) else unname(v[match(target, cn)])
+  list(sites = sites, tumor = tu, normal = no, has_protein = !is.null(prot),
+       prot_tumor = align(prot$tumor, pcols$protein_tumor, colnames(tu)), prot_normal = align(prot$normal, pcols$protein_normal, colnames(no)))
+}
+
+# matched tumour/normal values of site k (row index), as in cptac_pairs()$pairs; relative = site minus protein level
+phospho_pairs <- function(ph, k, relative = FALSE) {
+  t <- ph$tumor[k, ]; n <- ph$normal[k, ]
+  if (relative) { t <- t - ph$prot_tumor; n <- n - ph$prot_normal }
+  ids <- intersect(names(t), names(n)); ok <- ids[is.finite(t[ids]) & is.finite(n[ids])]
+  data.frame(case_id = ok, normal = unname(n[ok]), tumour = unname(t[ok]), diff = unname(t[ok] - n[ok]))
 }
 
 bulk_values <- function(d, symbol) {

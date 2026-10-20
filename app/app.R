@@ -72,6 +72,15 @@ ui <- page_navbar(
           fig_downloads("dl_cptac"), hr(), plotlyOutput("p_bulk", height = "440px"), fig_downloads("dl_bulk"),
           note("CPTAC: Cao et al., Cell 2021 (135 PDAC tumours; 64 protein and 19 RNA tumour/adjacent-normal pairs). TCGA/GTEx via recount3. ",
                "Adjacent normal tissue from pancreatic-cancer surgery is fibrotic and inflamed; it is not healthy pancreas.")),
+        if (isTRUE(D$has_phospho)) nav_panel("Phosphosites",
+          radioButtons("ph_mode", NULL, inline = TRUE, choices = c("Site abundance" = "raw", "Relative to the protein level" = "rel")),
+          plotlyOutput("p_phsites", height = "auto"), uiOutput("ph_site_ui"),
+          layout_columns(col_widths = c(6, 6), plotlyOutput("p_phsite", height = "460px"), plotlyOutput("p_phsite_rel", height = "460px")),
+          fig_downloads("dl_phospho"), hr(), DTOutput("t_phospho", fill = FALSE),
+          note("CPTAC phosphoproteome (Cao et al., Cell 2021): phosphosite intensities in tumours and matched adjacent normal tissue of the same patients. ",
+               "A site is compared only if quantified in both tissues of at least ", PHOSPHO_MIN_PAIRS, " patients (paired Wilcoxon test; false discovery rate across the sites of this gene). ",
+               "'Relative to the protein level' subtracts the gene's protein level in the same sample, separating a change in phosphorylation from a change in the amount of protein. ",
+               "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity.")),
         nav_panel("Cell types",
           plotlyOutput("p_ct", height = "520px"),
           layout_columns(col_widths = c(6, 6), plotlyOutput("p_share", height = "420px"), plotlyOutput("p_frac", height = "420px")),
@@ -129,18 +138,29 @@ server <- function(input, output, session) {
   for (i in seq_along(EXAMPLE_LISTS)) local({ ii <- i; observeEvent(input[[paste0("exl_", ii)]], updateTextAreaInput(session, "genelist", value = EXAMPLE_LISTS[[ii]])) })
 
   gene <- reactive({ req(input$gene, input$gene %in% D$genes$symbol); input$gene })
+  fname <- function(stub, ext) function() paste0(gene(), "_", stub, "_", format(Sys.Date()), ".", ext)
   pr <- reactive(cptac_pairs(D, gene(), "protein")); rn <- reactive(cptac_pairs(D, gene(), "rna"))
   bk <- reactive(bulk_values(D, gene())); sv <- reactive(sc_values(D, gene()))
   uv <- reactive(umap_values(D, gene_row(D, gene())$sym_sc))
   cs <- reactive({ v <- sv(); if (is.null(v)) NULL else celltype_summary(v, input$context) })
   cs_naive <- reactive({ v <- sv(); if (is.null(v)) NULL else celltype_summary(v, "Primary tumour") })
+  ph <- reactive(phospho_sites(D, gene()))
+  ph_raw <- reactive(phospho_table(ph(), relative = FALSE))
+  ph_rel <- reactive({ x <- ph(); if (is.null(x) || !x$has_protein) NULL else phospho_table(x, relative = TRUE) })
+  ph_rel_p <- reactive({ x <- ph(); if (is.null(x) || !x$has_protein) NULL else phospho_table(x, relative = TRUE, ci = FALSE) })   # summary: p-values only
+  ph_relmode <- reactive(identical(input$ph_mode, "rel"))
+  ph_tab <- reactive(if (ph_relmode()) ph_rel() else ph_raw())          # NULL: no sites (or, relative, no protein)
+  ph_pairs_n <- if (isTRUE(D$has_phospho)) length(intersect(D$phospho$info$colnames$phospho_tumor, D$phospho$info$colnames$phospho_normal)) else 0L
 
   figs <- list(
     prot = reactive(plot_cptac_paired(pr(), gene(), "protein")), rna = reactive(plot_cptac_paired(rn(), gene(), "RNA")),
     bulk = reactive(plot_bulk(bk(), gene())), ct = reactive(plot_celltypes(cs(), gene(), input$context)),
     share = reactive(plot_share(cs(), gene())), frac = reactive(plot_frac(cs(), gene())),
     states = reactive(plot_states(sv(), gene(), input$compartments)), fibro = reactive(plot_fibro(sv(), gene())),
-    ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())))
+    ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())),
+    phsites = reactive(plot_phospho_sites(ph_tab(), gene(), relative = ph_relmode(), has_sites = !is.null(ph()))),
+    phsite = reactive(plot_cptac_paired(ph_site_pairs(FALSE), gene(), "phosphosite")),
+    phsite_rel = reactive(if (isTRUE(ph()$has_protein)) plot_cptac_paired(ph_site_pairs(TRUE), gene(), "phosphosite") else empty_plot("Protein not quantified")))
 
   output$gene_header <- renderUI({
     gr <- gene_row(D, gene())
@@ -149,12 +169,16 @@ server <- function(input, output, session) {
         h2(gr$symbol, span(class = "gene-name", if (!is.na(gr$name)) gr$name else "")),
         if (nzchar(gr$aliases)) p(class = "aliases", "Also known as: ", gr$aliases),
         div(chip("Protein (CPTAC)", !is.na(gr$sym_cptac_protein)), chip("RNA (CPTAC)", !is.na(gr$sym_cptac_rna)),
-            chip("RNA (TCGA/GTEx)", !is.na(gr$sym_tcga_gtex)), chip("Single-cell atlas", !is.na(gr$sym_sc) && isTRUE(D$has_sc))))
+            if (isTRUE(D$has_phospho)) chip("Phosphosites (CPTAC)", gr$symbol %in% D$phospho_map$symbol),
+            chip("RNA (TCGA/GTEx)", !is.na(gr$sym_tcga_gtex)), chip("Single-cell atlas", !is.na(gr$sym_sc) && isTRUE(D$has_sc))),
+        div(class = "links-out", span(class = "links-label", "Elsewhere:"),
+            lapply(gene_links(gr), function(l) tags$a(href = l$url, target = "_blank", rel = "noopener noreferrer", title = l$hint, class = "link-out", l$label))))
   })
 
   output$summary_ui <- renderUI({
     g <- gene(); sp <- paired_stats(pr()); sr <- paired_stats(rn())
-    items <- list(txt_cptac(pr(), sp, g, "protein"), txt_cptac(rn(), sr, g, "rna"), txt_bulk(bk(), g), txt_sc(cs_naive(), g), txt_state(sv(), g))
+    items <- list(txt_cptac(pr(), sp, g, "protein"), txt_cptac(rn(), sr, g, "rna"),
+                  if (isTRUE(D$has_phospho)) txt_phospho(ph_raw(), ph_rel_p(), g, ph_pairs_n), txt_bulk(bk(), g), txt_sc(cs_naive(), g), txt_state(sv(), g))
     items <- Filter(Negate(is.null), items)
     tagList(tags$ul(class = "summary-list", lapply(items, tags$li)),
             note("These sentences describe the data; they do not establish mechanism or causality. p-values are unadjusted and refer to the single comparison stated. ",
@@ -166,6 +190,45 @@ server <- function(input, output, session) {
   output$p_share <- renderPlotly(to_plotly(figs$share())); output$p_frac <- renderPlotly(to_plotly(figs$frac()))
   output$p_states <- renderPlotly(to_plotly(figs$states())); output$p_fibro <- renderPlotly(to_plotly(figs$fibro()))
   output$p_ductal <- renderPlotly(to_plotly(figs$ductal()))
+
+  # ---- phosphosites ----
+  ph_n_shown <- reactive({ t <- ph_tab(); if (is.null(t)) 0L else min(sum(!is.na(t$p)), PHOSPHO_MAX_PLOT) })
+  output$p_phsites <- renderPlotly(to_plotly(figs$phsites(), height = 190 + 22 * max(4, ph_n_shown())))
+  output$ph_site_ui <- renderUI({
+    t <- ph_tab(); if (is.null(t)) t <- ph_raw(); if (is.null(t) || !any(!is.na(t$p))) return(NULL)
+    tt <- t[!is.na(t$p), ]; ch <- stats::setNames(tt$label, paste0(tt$label, "  (p = ", fmt_p(tt$p), ", ", tt$n_pairs, " pairs)"))
+    sel <- if (isTRUE(isolate(input$ph_site) %in% tt$label)) isolate(input$ph_site) else tt$label[which.min(tt$p)]
+    div(class = "ph-site-select", selectInput("ph_site", "Patient-level values for site", choices = ch, selected = sel, width = "360px"))
+  })
+  ph_site_pairs <- function(rel) {       # the selected site, both value types side by side
+    x <- ph(); req(x, input$ph_site); k <- match(input$ph_site, x$sites$label); req(!is.na(k))
+    list(pairs = phospho_pairs(x, k, rel), assay = if (rel) "phospho_rel" else "phospho", site = input$ph_site)
+  }
+  ph_any <- reactive({ t <- ph_raw(); !is.null(t) && any(!is.na(t$p)) })
+  output$p_phsite <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite()) })
+  output$p_phsite_rel <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite_rel()) })
+  ph_table_view <- reactive({ t <- ph_tab(); req(t)
+    t[order(is.na(t$p), match(t$label, ph()$sites$label)), c("label", "site_id", "peptide", "n_tumours", "n_pairs", "median_normal", "median_tumour", "median_diff", "ci_low", "ci_high", "p", "q", "n_up", "n_down", "values")] })
+  output$t_phospho <- renderDT(datatable(ph_table_view(), rownames = FALSE, style = "default", class = "compact stripe hover", extensions = "Buttons",
+                                         colnames = c("site", "site ID", "peptide(s)", "tumours quantified", "pairs", "median normal", "median tumour", "median change", "CI low", "CI high", "p", "FDR", "pairs up", "pairs down", "values"),
+                                         options = list(pageLength = 10, dom = "Bfrtip", scrollX = TRUE, buttons = dt_buttons(gene(), "CPTAC_phosphosites"))) |>
+                                 formatRound(c("median_normal", "median_tumour", "median_diff", "ci_low", "ci_high"), 3, mark = "") |>
+                                 formatSignif(c("p", "q"), 2), server = FALSE)
+  ph_long <- reactive({ x <- ph()               # per-patient values of every site (both value types) for the CSV download
+    if (is.null(x)) return(data.frame(note = paste("No", gene(), "phosphosites were quantified in the CPTAC data.")))
+    do.call(rbind, lapply(seq_len(nrow(x$sites)), function(k) {
+      a <- phospho_pairs(x, k, FALSE); if (!nrow(a)) return(NULL)
+      b <- if (x$has_protein) phospho_pairs(x, k, TRUE) else a[0, ]
+      r <- data.frame(site = x$sites$label[k], site_id = x$sites$site_id[k], a, normal_rel_protein = b$normal[match(a$case_id, b$case_id)],
+                      tumour_rel_protein = b$tumour[match(a$case_id, b$case_id)], diff_rel_protein = b$diff[match(a$case_id, b$case_id)])
+      num <- vapply(r, is.double, logical(1)); r[num] <- lapply(r[num], round, 3); r       # inputs have 3 decimals
+    })) })
+  ph_h <- reactive(2.2 + 0.2 * max(4, ph_n_shown()))
+  output$dl_phospho_pdf <- downloadHandler(fname("CPTAC_phosphosites", "pdf"), function(file) {
+    grDevices::pdf(file, width = 9, height = ph_h()); print(for_export(figs$phsites(), 9))
+    if (ph_any()) { print(for_export(figs$phsite(), 9)); if (isTRUE(ph()$has_protein)) print(for_export(figs$phsite_rel(), 9)) }; grDevices::dev.off() })
+  output$dl_phospho_png <- downloadHandler(fname("CPTAC_phosphosites", "png"), function(file) ggsave(file, for_export(figs$phsites(), 9), width = 9, height = ph_h(), dpi = 200, bg = "white"))
+  output$dl_phospho_csv <- downloadHandler(fname("CPTAC_phosphosites_per_patient", "csv"), function(file) utils::write.csv(ph_long(), file, row.names = FALSE))
 
   output$p_umap <- renderPlotly({
     u <- D$umap; validate(need(!is.null(u), "Atlas map not available.")); col <- gene_row(D, gene())$sym_sc
@@ -204,7 +267,6 @@ server <- function(input, output, session) {
                                formatRound(c("normal", "tumour", "diff"), 3, mark = ""), server = FALSE)
 
   # downloads: figure(s) + underlying data
-  fname <- function(stub, ext) function() paste0(gene(), "_", stub, "_", format(Sys.Date()), ".", ext)
   save_figs <- function(file, plots, w, h, dev) {
     plots <- lapply(plots, for_export, width_in = w)
     if (length(plots) == 1) { ggsave(file, plots[[1]], width = w, height = h, device = dev, bg = "white", dpi = 200); return(invisible()) }

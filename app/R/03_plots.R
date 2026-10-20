@@ -14,9 +14,13 @@ empty_plot <- function(msg) ggplot() + annotate("text", x = 0, y = 0, label = ms
 src_caption <- function(...) paste0(..., "  |  ", APP_TITLE, " v", APP_VERSION)
 
 # CPTAC: one line per patient, adjacent normal -> tumour
+# (also used for one phosphosite: p$assay "phospho" or "phospho_rel" and p$site = the site label)
 plot_cptac_paired <- function(p, symbol, assay = "protein") {
   if (is.null(p) || nrow(p$pairs) < 3) return(empty_plot(paste0(symbol, ": not measured in enough matched patients (", assay, ")")))
-  lab <- if (p$assay == "protein") "Protein abundance (log2, median-normalised)" else "RNA (log2 RSEM upper-quartile)"
+  lab <- switch(p$assay, protein = "Protein abundance (log2, median-normalised)", rna = "RNA (log2 RSEM upper-quartile)",
+                phospho = "Phosphosite (log2, median-normalised)", phospho_rel = "Phosphosite minus protein (log2)")
+  ttl <- switch(p$assay, protein = paste0(symbol, " protein: tumour vs matched adjacent normal"), rna = paste0(symbol, " RNA: tumour vs matched adjacent normal"),
+                paste0(symbol, " ", p$site, if (p$assay == "phospho_rel") ": relative to protein" else ": phosphosite"))
   long <- rbind(data.frame(p$pairs[, "case_id", drop = FALSE], tissue = "Adjacent normal", value = p$pairs$normal),
                 data.frame(p$pairs[, "case_id", drop = FALSE], tissue = "Tumour", value = p$pairs$tumour))
   long$tissue <- factor(long$tissue, levels = c("Adjacent normal", "Tumour"))
@@ -26,9 +30,35 @@ plot_cptac_paired <- function(p, symbol, assay = "protein") {
     geom_line(aes(colour = direction), linewidth = 0.4, alpha = 0.55) +
     geom_point(aes(text = text), shape = 21, fill = INK[["secondary"]], colour = "white", size = 2.4, stroke = 0.5) +
     scale_colour_manual(values = c("higher in tumour" = "#eb6834", "lower in tumour" = "#2a78d6"), guide = "none") +
-    labs(x = NULL, y = lab, title = paste0(symbol, " ", if (p$assay == "protein") "protein" else "RNA", ": tumour vs matched adjacent normal"),
+    labs(x = NULL, y = lab, title = ttl,
          subtitle = paste0(nrow(p$pairs), " patients with both samples measured; orange line = higher in tumour, blue = lower"),
          caption = src_caption("Data: Cao et al., Cell 2021 (CPTAC) via LinkedOmics")) + theme_px()
+}
+
+# phosphosites of one gene: median paired change per site with 95% bootstrap CI; colour = direction if FDR < 5%
+plot_phospho_sites <- function(tab, symbol, relative = FALSE, has_sites = !is.null(tab)) {
+  rel <- relative
+  if (!has_sites) return(empty_plot(paste0(symbol, ": no phosphosites quantified in the CPTAC data")))
+  if (is.null(tab)) return(empty_plot(paste0(symbol, ": protein not quantified, so values relative to protein are not available")))
+  tt <- tab[!is.na(tab$p), ]
+  if (!nrow(tt)) return(empty_plot(paste0(symbol, ": no phosphosite quantified in at least ", PHOSPHO_MIN_PAIRS, " matched patients")))
+  shown <- if (nrow(tt) > PHOSPHO_MAX_PLOT) tt[order(tt$p, -tt$n_pairs)[seq_len(PHOSPHO_MAX_PLOT)], ] else tt
+  shown <- shown[order(match(shown$label, tab$label)), ]                 # protein order: isoform, then position
+  shown$class <- ifelse(shown$q < 0.05, ifelse(shown$median_diff > 0, "higher in tumour", "lower in tumour"), "no clear difference")
+  shown$text <- paste0(symbol, " ", shown$label, "<br>median change: ", fmt_signed(shown$median_diff), " (95% CI ", fmt_num(shown$ci_low), " to ", fmt_num(shown$ci_high), ")",
+                       "<br>", shown$n_up, " of ", shown$n_pairs, " patients higher in tumour<br>p = ", fmt_p(shown$p), ", FDR = ", fmt_p(shown$q),
+                       ifelse(shown$source_symbol != symbol, paste0("<br>listed in CPTAC under ", shown$source_symbol), ""))
+  ggplot(shown, aes(median_diff, label, text = text)) + geom_vline(xintercept = 0, colour = INK[["muted"]], linewidth = 0.3) +
+    geom_errorbar(aes(xmin = ci_low, xmax = ci_high), width = 0, colour = INK[["secondary"]], linewidth = 0.4, orientation = "y") +
+    geom_point(aes(fill = class), shape = 21, size = 2.6, colour = INK[["primary"]], stroke = 0.3) +
+    scale_fill_manual(values = c("higher in tumour" = "#eb6834", "lower in tumour" = "#2a78d6", "no clear difference" = "white"), guide = "none") +
+    scale_y_discrete(limits = rev(shown$label)) +
+    labs(x = if (rel) "Median change relative to protein, tumour minus normal (log2; bars = 95% bootstrap CI)" else "Median change, tumour minus normal (log2; bars = 95% bootstrap CI)",
+         y = NULL, title = paste0(symbol, " phosphosites: tumour vs matched adjacent normal", if (rel) " (relative to protein level)" else ""),
+         subtitle = paste0(nrow(tt), " sites with >= ", PHOSPHO_MIN_PAIRS, " patient pairs",
+                           if (nrow(tt) > nrow(shown)) paste0(" (", nrow(shown), " with smallest p shown; all in the table)") else "",
+                           "; orange = higher, blue = lower in tumour (FDR < 5%), white = no clear difference"),
+         caption = src_caption("Data: Cao et al., Cell 2021 (CPTAC) via LinkedOmics; sites numbered on the RefSeq protein")) + theme_px()
 }
 
 plot_bulk <- function(b, symbol) {

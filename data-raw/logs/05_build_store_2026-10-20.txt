@@ -1,0 +1,38 @@
+05_build_store started 2026-10-20 14:46:52 UTC
+cptac.sqlite: up to date, skipped 
+bulk.sqlite: up to date, skipped 
+sc.sqlite: up to date, skipped 
+phospho: building phospho.sqlite from cptac_phospho.rds, genes.rds ... 
+phospho: 7783 gene symbols with sites, 7783 linked to 7780 index genes; combined: KIAA0754 + MACF1, MICAL2 + MICALCL, PALM2 + PALM2-AKAP2 
+phospho.sqlite/site: 7783 genes (50335 sites) verified 
+phospho.sqlite: 15.9 MB, MD5 23bec8c165bb4d1ac6d81d660aeb5cc8, 0.4 min 
+gene index: all 44573 genes resolve to stored records 
+finished 2026-10-20 14:47:14 UTC
+
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26200)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] RSQLite_2.4.6        DBI_1.3.0            Matrix_1.7-5         org.Hs.eg.db_3.20.0  AnnotationDbi_1.68.0 IRanges_2.40.1       S4Vectors_0.44.0    
+[8] Biobase_2.66.0       BiocGenerics_0.52.0 
+
+loaded via a namespace (and not attached):
+ [1] crayon_1.5.3            vctrs_0.7.3             httr_1.4.9              cli_3.6.6               rlang_1.3.0             otel_0.2.0             
+ [7] png_0.1-9               UCSC.utils_1.2.0        jsonlite_2.0.0          bit_4.6.0               Biostrings_2.74.1       KEGGREST_1.46.0        
+[13] grid_4.4.1              fastmap_1.2.0           GenomeInfoDb_1.42.3     memoise_2.0.1           compiler_4.4.1          blob_1.3.0             
+[19] pkgconfig_2.0.3         XVector_0.46.0          rstudioapi_0.19.0       lattice_0.22-9          R6_2.6.1                GenomeInfoDbData_1.2.13
+[25] tools_4.4.1             bit64_4.8.6             zlibbioc_1.52.0         cachem_1.1.0           

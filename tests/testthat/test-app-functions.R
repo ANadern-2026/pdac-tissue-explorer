@@ -49,3 +49,45 @@ test_that("plain-language text handles missing data gracefully", {
   zero <- list(pairs = data.frame(case_id = paste0("P", 1:8), normal = 0, tumour = 0, diff = 0), n_tumours_measured = 8, n_tumours_total = 8)
   expect_match(txt_cptac(zero, paired_stats(zero), "XYZ", "rna"), "no clear difference.*p = n/a")   # all values identical: p is NA
 })
+
+test_that("vectorised bootstrap interval is identical to the v0.1 replicate() version", {
+  ref <- function(x, n = BOOT_N, seed = 1L) { if (length(x) < 3) return(c(NA_real_, NA_real_))
+    set.seed(seed); b <- replicate(n, stats::median(sample(x, replace = TRUE))); unname(stats::quantile(b, c(0.025, 0.975))) }
+  set.seed(9)
+  for (i in 1:60) { k <- sample(3:70, 1); x <- round(rnorm(k), sample(1:4, 1)); if (i %% 4 == 0) x[1:3] <- x[4]; expect_identical(boot_median_ci(x), ref(x)) }
+  expect_identical(boot_median_ci(c(1, 2)), c(NA_real_, NA_real_))
+})
+
+test_that("phosphosite statistics: minimum pairs, relative to protein, FDR within the gene", {
+  set.seed(4); cs <- paste0("C3L-", 1:20)
+  tu <- rbind(S1 = rnorm(20, 20) + 2, T5 = rnorm(20, 18), Y9 = c(rnorm(5, 15), rep(NA, 15)))
+  no <- rbind(S1 = rnorm(20, 20), T5 = tu["T5", ] + rep(c(0.1, -0.1), 10), Y9 = rnorm(20, 15)); colnames(tu) <- colnames(no) <- cs   # T5: no change
+  ph <- list(sites = data.frame(label = rownames(tu), site_id = paste0("NP_1.1_", rownames(tu)), residue = c("S", "T", "Y"), position = c(1L, 5L, 9L),
+                                refseq = "NP_1.1", source_symbol = "G", peptide = "x"),
+             tumor = tu, normal = no, has_protein = TRUE, prot_tumor = rep(2, 20), prot_normal = rep(0, 20))
+  a <- phospho_table(ph); r <- phospho_table(ph, relative = TRUE)
+  expect_identical(a$n_pairs, c(20L, 20L, 5L)); expect_true(is.na(a$p[3]))                      # Y9: 5 pairs < PHOSPHO_MIN_PAIRS
+  expect_lt(a$q[1], 0.05); expect_equal(r$median_diff, a$median_diff - 2)                         # protein up by 2 in every tumour
+  expect_identical(a$q[1:2], p.adjust(a$p[1:2], "BH"))
+  expect_identical(phospho_table(ph, ci = FALSE)$p, a$p); expect_true(all(is.na(phospho_table(ph, ci = FALSE)$ci_low)))
+  txt <- txt_phospho(a, r, "G", 20)
+  expect_match(txt, "3 sites quantified; 2 compared in at least 10 matched pairs: 1 higher and 0 lower in tumour")
+  expect_match(txt, "largest change at S1"); expect_match(txt, "Relative to the protein level")
+  expect_match(txt_phospho(a, NULL, "G", 20), "protein itself was not quantified")
+  expect_match(txt_phospho(NULL, NULL, "G", 20), "no G phosphosites")
+  expect_s3_class(plot_phospho_sites(a, "G"), "ggplot"); expect_s3_class(plot_phospho_sites(NULL, "G", has_sites = FALSE), "ggplot")
+})
+
+test_that("links out use identifiers when known and searches otherwise", {
+  gr <- data.frame(symbol = "MSLN", entrez = "10232", stringsAsFactors = FALSE)
+  l <- gene_links(gr)
+  expect_identical(names(l), c("ncbi", "uniprot", "hpa", "opentargets", "depmap"))
+  expect_identical(l$ncbi$url, "https://www.ncbi.nlm.nih.gov/gene/10232"); expect_match(l$hpa$url, "proteinatlas.org/search/MSLN$")
+  x <- data.frame(symbol = c("MSLN", "MIR1"), entrez = c("10232", "406904"), ensembl = c("ENSG00000102854", NA), gene_type = c("protein-coding", "ncRNA"))
+  g <- add_xrefs(data.frame(symbol = c("MSLN", "MIR1", "ABC"), entrez = c("10232", "999", NA), stringsAsFactors = FALSE), x)
+  expect_identical(g$ensembl, c("ENSG00000102854", NA, NA)); expect_identical(g$gene_type, c("protein-coding", NA, NA))   # MIR1: Entrez disagrees
+  l <- gene_links(g[1, ])
+  expect_identical(l$hpa$url, "https://www.proteinatlas.org/ENSG00000102854"); expect_identical(l$opentargets$url, "https://platform.opentargets.org/target/ENSG00000102854")
+  nc <- gene_links(data.frame(symbol = "MIR1 (Entrez 406904)", entrez = NA, ensembl = NA, gene_type = "ncRNA"))
+  expect_identical(names(nc), c("ncbi", "opentargets", "depmap")); expect_match(nc$ncbi$url, "term=MIR1%5Bsym%5D"); expect_match(nc$depmap$url, "/gene/MIR1\\?")
+})
