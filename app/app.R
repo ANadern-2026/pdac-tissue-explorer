@@ -15,7 +15,12 @@ EXAMPLE_LISTS <- list(
   "Fibroblast markers" = "COL1A1, DCN, LUM, FAP, ACTA2, PDGFRB, CXCL12",
   "Classical vs basal-like tumour cells" = "GATA6, TFF1, LGALS4, CLDN18, KRT17, KRT5, S100A2, VGLL1",
   "Immune checkpoints" = "CD274, PDCD1LG2, PDCD1, CTLA4, LAG3, HAVCR2, TIGIT")
-DEFAULT_GENE <- if (isTRUE(D$has_sc)) { g <- intersect(EXAMPLE_GENES, D$genes$symbol[!is.na(D$genes$sym_sc)]); if (length(g)) g[1] else D$genes$symbol[!is.na(D$genes$sym_sc)][1] } else EXAMPLE_GENES[1]
+# start-up gene: a random, well-covered gene per session (measured in CPTAC protein and RNA, TCGA/GTEx and the single-cell atlas,
+# and expressed widely enough in at least one cell type for co-expression), so first views are rarely empty
+START_POOL <- with(D$genes, symbol[!is.na(sym_cptac_protein) & !is.na(sym_cptac_rna) & !is.na(sym_tcga_gtex) & !is.na(sym_sc)])
+if (isTRUE(D$has_coexp)) START_POOL <- START_POOL[gene_row(D, START_POOL)$sym_sc %in% store_ids(D$coexp, "partners")]
+if (!length(START_POOL)) START_POOL <- EXAMPLE_GENES[1]
+random_start_gene <- function() { set.seed(NULL); sample(START_POOL, 1L) }   # re-seeded: bootstrap CIs set fixed seeds
 
 SURV_CHOICES <- c("TCGA-PAAD RNA: overall survival" = "TCGA-PAAD RNA|os", "TCGA-PAAD RNA: progression-free interval" = "TCGA-PAAD RNA|pfi",
                   "CPTAC protein: overall survival" = "CPTAC protein|os", "CPTAC RNA: overall survival" = "CPTAC RNA|os")
@@ -25,8 +30,9 @@ theme_app <- bs_theme(version = 5, bg = "#fcfcfb", fg = "#0b0b0b", primary = "#2
                       base_font = font_collection("Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
                       "navbar-bg" = "#ffffff", "card-border-color" = "#e9e8e4")
 
-to_plotly <- function(p, height = NULL) {
-  ttl <- p$labels$title; sub <- p$labels$subtitle; faceted <- !inherits(p$facet, "FacetNull")
+to_plotly <- function(p, height = NULL, wrap = NULL) {      # wrap: max characters per subtitle line (plots in narrow columns)
+  ttl <- p$labels$title; sub <- p$labels$subtitle
+  if (!is.null(sub) && !is.null(wrap)) sub <- paste(unlist(lapply(strsplit(sub, "\n", fixed = TRUE)[[1]], strwrap, width = wrap)), collapse = "\n"); faceted <- !inherits(p$facet, "FacetNull")
   p$labels$title <- NULL; p$labels$subtitle <- NULL; p$labels$caption <- NULL
   out <- ggplotly(p, tooltip = "text", height = height)
   out <- plotly_build(out)
@@ -39,11 +45,13 @@ to_plotly <- function(p, height = NULL) {
   sub_lines <- if (is.null(sub)) 0L else length(strsplit(sub, "\n", fixed = TRUE)[[1]])
   strip_lines <- if (!faceted) 0L else { v <- names(p$facet$params$facets); if (!length(v) || !v[1] %in% names(p$data)) 1L else
     max(1L, vapply(strsplit(as.character(unique(p$data[[v[1]]])), "\n", fixed = TRUE), length, integer(1))) }
-  top <- (if (sub_lines) 75 + 16 * (sub_lines - 1L) else 45) + 30 * strip_lines
+  ttl_lines <- 1L
+  if (!is.null(ttl) && !is.null(wrap)) { tw <- strwrap(ttl, width = round(0.8 * wrap)); ttl_lines <- length(tw); ttl <- paste(tw, collapse = "<br>") }   # bold 15 px: fewer characters per line
+  top <- 52 + 22 * (ttl_lines - 1L) + 20 * sub_lines + 28 * strip_lines       # title block is anchored at the top (see layout below)
   if (!is.null(sub)) sub <- gsub("\n", "<br>", sub, fixed = TRUE)
   out <- layout(out, showlegend = FALSE,
                 title = list(text = paste0("<b>", ttl, "</b>", if (!is.null(sub)) paste0("<br><span style='font-size:12px;color:#52514e'>", sub, "</span>") else ""),
-                             x = 0, xanchor = "left", font = list(size = 15)),
+                             x = 0, xanchor = "left", y = 1, yref = "container", yanchor = "top", pad = list(t = 14), font = list(size = 15)),   # anchored at the top: long wrapped titles never reach the plot
                 margin = list(t = top), hoverlabel = list(bgcolor = "white", font = list(color = "#0b0b0b")))
   config(out, displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "select2d", "autoScale2d", "hoverCompareCartesian", "toggleSpikelines"))
 }
@@ -52,6 +60,7 @@ fig_downloads <- function(id) div(class = "dl-row", downloadButton(paste0(id, "_
                                   downloadButton(paste0(id, "_png"), "Figure (PNG)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_csv"), "Data (CSV)", class = "btn-sm btn-outline-secondary"))
 note <- function(...) p(class = "note", ...)
+strip <- function(...) div(class = "settings-strip", div(class = "strip-label", "View settings"), div(class = "strip-controls", ...))
 # Data-tab tables: DataTables' own style (style = "default") - the Ubuntu r-cran-dt package used on the server lacks the
 # Bootstrap 5 styles that DT would otherwise pick for a bslib page, which left the buttons unstyled. CSV file name: Buttons >= 1.2 reads `filename`, the server's Buttons 1.0.3 reads `title`.
 dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", format(Sys.Date())); list("copy", list(extend = "csvHtml5", filename = f, title = f)) }
@@ -64,61 +73,67 @@ ui <- page_navbar(
                                              a(href = MOVED_TO[1], target = "_top", sub("/$", "", sub("^https?://", "", MOVED_TO[1]))),
                                              if (length(MOVED_TO) > 1) span(" ", MOVED_TO[2]))),
   nav_panel("Explore a gene", value = "gene",
-    layout_sidebar(
-      sidebar = sidebar(width = 300,
-        selectizeInput("gene", "Gene", choices = NULL, options = list(placeholder = "Symbol, alias or name", maxOptions = 50)),
-        div(class = "examples", span("Try: "), lapply(EXAMPLE_GENES[1:min(5, length(EXAMPLE_GENES))], function(g) actionLink(paste0("ex_", g), g))),
-        hr(),
-        selectInput("context", "Tissue context for the cell-type view", choices = STATE_LEVELS, selected = "Primary tumour"),
-        checkboxGroupInput("compartments", "Cell types in the tissue-state view",
-                           choices = CELLTYPE_ORDER, selected = c("Fibroblasts", "Ductal: tumour subclusters", "Ductal: other", "Endothelial cells", "Myeloid cells", "T and NK cells")),
-        note("Each dot in the single-cell plots is one tissue sample. A sample contributes to a cell type only if it has at least ", MIN_CELLS, " cells of that type.")),
-      uiOutput("gene_header"),
-      navset_card_underline(id = "gene_tabs",
+    div(class = "gene-band",
+      div(class = "gene-search",
+        selectizeInput("gene", "Gene", choices = NULL, width = "100%", options = list(placeholder = "Type a gene symbol, alias or name", maxOptions = 50)),
+        div(class = "examples", span("Try: "), lapply(EXAMPLE_GENES[1:min(5, length(EXAMPLE_GENES))], function(g) actionLink(paste0("ex_", g), g)))),
+      div(class = "gene-band-header", uiOutput("gene_header"))),
+    navset_card_underline(id = "gene_tabs",
         nav_panel("Summary", uiOutput("summary_ui")),
         nav_panel("Tumour vs normal",
-          layout_columns(col_widths = c(6, 6), plotlyOutput("p_prot", height = "460px"), plotlyOutput("p_rna", height = "460px")),
-          fig_downloads("dl_cptac"), hr(), plotlyOutput("p_bulk", height = "440px"), fig_downloads("dl_bulk"),
+          layout_columns(col_widths = breakpoints(sm = 12, lg = c(12, 8), xl = c(8, 4)),
+            div(layout_columns(col_widths = breakpoints(sm = 12, md = c(6, 6)), plotlyOutput("p_prot", height = "460px"), plotlyOutput("p_rna", height = "460px")),
+                fig_downloads("dl_cptac")),
+            div(plotlyOutput("p_bulk", height = "460px"), fig_downloads("dl_bulk"))),
           note("CPTAC: Cao et al., Cell 2021 (135 PDAC tumours; 64 protein and 19 RNA tumour/adjacent-normal pairs). TCGA/GTEx via recount3. ",
                "Adjacent normal tissue from pancreatic-cancer surgery is fibrotic and inflamed; it is not healthy pancreas.")),
         if (isTRUE(D$has_phospho)) nav_panel("Phosphosites",
-          radioButtons("ph_mode", NULL, inline = TRUE, choices = c("Site abundance" = "raw", "Relative to the protein level" = "rel")),
-          plotlyOutput("p_phsites", height = "auto"), uiOutput("ph_site_ui"),
-          layout_columns(col_widths = c(6, 6), plotlyOutput("p_phsite", height = "460px"), plotlyOutput("p_phsite_rel", height = "460px")),
-          fig_downloads("dl_phospho"), hr(), DTOutput("t_phospho", fill = FALSE),
+          strip(radioButtons("ph_mode", "Values", inline = TRUE, choices = c("Site abundance" = "raw", "Relative to the protein level" = "rel"))),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
+            plotlyOutput("p_phsites", height = "auto"),
+            conditionalPanel("output.ph_has", uiOutput("ph_site_ui"),
+              layout_columns(col_widths = breakpoints(sm = 12, md = c(6, 6)), plotlyOutput("p_phsite", height = "440px"), plotlyOutput("p_phsite_rel", height = "440px")))),
+          fig_downloads("dl_phospho"), conditionalPanel("output.ph_has", hr(), DTOutput("t_phospho", fill = FALSE)),
           note("CPTAC phosphoproteome (Cao et al., Cell 2021): phosphosite intensities in tumours and matched adjacent normal tissue of the same patients. ",
                "A site is compared only if quantified in both tissues of at least ", PHOSPHO_MIN_PAIRS, " patients (paired Wilcoxon test; false discovery rate across the sites of this gene). ",
                "'Relative to the protein level' subtracts the gene's protein level in the same sample, separating a change in phosphorylation from a change in the amount of protein. ",
                "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity.")),
         if (isTRUE(D$has_clinical)) nav_panel("Clinical context",
-          radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES),
-          layout_columns(col_widths = c(7, 5), plotlyOutput("p_km", height = "500px"), plotlyOutput("p_hr", height = "500px")),
+          strip(radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES)),
+          layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)), plotlyOutput("p_km", height = "500px"), plotlyOutput("p_hr", height = "500px")),
           fig_downloads("dl_surv"),
           note("Kaplan-Meier curves compare tumours above the median with those at or below it (log-rank test). Hazard ratios come from Cox models of the continuous value ",
                "(per standard deviation within the dataset), unadjusted and adjusted for age and stage. No cut-point was optimised. ",
                "TCGA-PAAD: overall survival and progression-free interval from the TCGA Pan-Cancer Clinical Data Resource (Liu et al., Cell 2018); CPTAC: overall survival from the study's follow-up."),
-          hr(), plotlyOutput("p_stage", height = "440px"), fig_downloads("dl_stage"), hr(),
-          plotlyOutput("p_moffitt", height = "440px"), fig_downloads("dl_moffitt"),
+          hr(), layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
+            div(plotlyOutput("p_stage", height = "500px"), fig_downloads("dl_stage")),
+            div(plotlyOutput("p_moffitt", height = "500px"), fig_downloads("dl_moffitt"))),
           note("These associations are exploratory and observational. Survival after surgery depends on stage, resection margin, adjuvant therapy and tumour-cell content, ",
                "and with many genes tested, some will show p < 0.05 by chance. Bulk tumour values mix tumour and stromal cells: a gene expressed by stroma can appear ",
                "'classical' or 'basal-like' because the score partly tracks tumour-cell content. Use these views to generate hypotheses, not as evidence of prognostic value.")),
         nav_panel("Cell types",
-          plotlyOutput("p_ct", height = "520px"),
-          layout_columns(col_widths = c(6, 6), plotlyOutput("p_share", height = "420px"), plotlyOutput("p_frac", height = "420px")),
+          strip(radioButtons("context", "Tissue context", choices = STATE_LEVELS, selected = "Primary tumour", inline = TRUE)),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
+            plotlyOutput("p_ct", height = "580px"), div(plotlyOutput("p_share", height = "290px"), plotlyOutput("p_frac", height = "290px"))),
           fig_downloads("dl_ct"),
-          note("Average expression = log1p of the mean normalised expression (CP10k) of all cells of that type in a sample. ",
+          note("Each dot is one tissue sample; a sample contributes to a cell type only if it has at least ", MIN_CELLS, " cells of that type. Average expression = log1p of the mean normalised expression (CP10k) of all cells of that type in a sample. ",
                "'Ductal: tumour subclusters' are ductal cells assigned to the atlas's malignant subclusters; 'Ductal: other' are remaining ductal cells, mostly non-malignant duct.")),
-        nav_panel("Tissue states", plotlyOutput("p_states", height = "640px"), fig_downloads("dl_states"),
-          note("Healthy donor pancreas, adjacent normal tissue and treatment-naive primary tumours and liver metastases; treated primary tumours (chemotherapy or chemoradiation) are shown separately. ",
+        nav_panel("Tissue states",
+          strip(checkboxGroupInput("compartments", "Cell types shown", choices = CELLTYPE_ORDER, inline = TRUE,
+                                   selected = c("Fibroblasts", "Ductal: tumour subclusters", "Ductal: other", "Endothelial cells", "Myeloid cells", "T and NK cells"))),
+          plotlyOutput("p_states", height = "640px"), fig_downloads("dl_states"),
+          note("One dot per tissue sample with at least ", MIN_CELLS, " cells of that type. Healthy donor pancreas, adjacent normal tissue and treatment-naive primary tumours and liver metastases; treated primary tumours (chemotherapy or chemoradiation) are shown separately. ",
                "Tissue states come from different studies, so study and state are partly confounded.")),
         nav_panel("Subtypes",
-          plotlyOutput("p_fibro", height = "460px"), fig_downloads("dl_fibro"), hr(),
-          plotlyOutput("p_ductal", height = "440px"), fig_downloads("dl_ductal"),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(7, 5)),
+            div(plotlyOutput("p_fibro", height = "480px"), fig_downloads("dl_fibro")),
+            div(plotlyOutput("p_ductal", height = "480px"), fig_downloads("dl_ductal"))),
           note("Fibroblast and tumour-cell subclusters as published with the atlas (Loveless et al., Clin Cancer Res 2025).")),
         if (isTRUE(D$has_coexp)) nav_panel("Co-expression",
-          div(class = "cx-controls", selectInput("cx_cell", "Cell type", choices = NULL, width = "300px"), uiOutput("cx_partner_ui")),
-          plotlyOutput("p_coexp", height = "auto"),
-          conditionalPanel("output.cx_has", hr(), plotlyOutput("p_coexp_pair", height = "460px"), fig_downloads("dl_coexp"), hr(), DTOutput("t_coexp", fill = FALSE)),
+          strip(selectInput("cx_cell", "Cell type", choices = NULL, width = "300px"), uiOutput("cx_partner_ui")),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(5, 7)),
+            plotlyOutput("p_coexp", height = "auto"),
+            conditionalPanel("output.cx_has", plotlyOutput("p_coexp_pair", height = "460px"), fig_downloads("dl_coexp"), DTOutput("t_coexp", fill = FALSE))),
           note("Genes whose expression rises and falls with the selected gene across patients, within one cell type: for every treatment-naive primary tumour with at least ",
                MIN_CELLS, " cells of that type, the cell type's average expression; each gene is centred within its study to remove study effects, then genes are compared by ",
                "Spearman's rank correlation (rho). Only genes detected in at least ", paste0(round(100 * COEXP_MIN_FRAC), "%"), " of the cell type's cells in at least half of the samples are analysed. ",
@@ -132,7 +147,7 @@ ui <- page_navbar(
         nav_panel("Data",
           note("Per-sample single-cell values for the selected gene (all tissue states). Use the buttons to copy or download."),
           DTOutput("t_sc", fill = FALSE), hr(), note("CPTAC matched tumour/normal values."), DTOutput("t_cptac", fill = FALSE))
-      ))),
+      )),
   nav_panel("Compare genes", value = "multi",
     layout_sidebar(
       sidebar = sidebar(width = 320,
@@ -157,7 +172,7 @@ server <- function(input, output, session) {
     footer = tagList(modalButton("Continue here"), a(class = "btn btn-primary", href = MOVED_TO[1], target = "_top", "Go to the new address"))))
   gene_df <- data.frame(value = D$genes$symbol, label = D$genes$symbol, name = ifelse(is.na(D$genes$name), "", D$genes$name),
                         aliases = D$genes$aliases, stringsAsFactors = FALSE)
-  updateSelectizeInput(session, "gene", choices = gene_df, selected = DEFAULT_GENE, server = TRUE,
+  updateSelectizeInput(session, "gene", choices = gene_df, selected = random_start_gene(), server = TRUE,
                        options = list(valueField = "value", labelField = "label", searchField = c("label", "aliases", "name"),
                                       score = I("function(search) { var base = this.getScoreFunction(search); var q = String(typeof search === 'string' ? search : (search.query || '')).toUpperCase().trim();
                                                    return function(item) { var l = item.label.toUpperCase(); var al = (item.aliases || '').toUpperCase().split(/,\\s*/);
@@ -239,15 +254,15 @@ server <- function(input, output, session) {
                  "See the other tabs for the full distributions and the About page for methods and limitations."))
   })
 
-  output$p_prot <- renderPlotly(to_plotly(figs$prot())); output$p_rna <- renderPlotly(to_plotly(figs$rna()))
-  output$p_bulk <- renderPlotly(to_plotly(figs$bulk())); output$p_ct <- renderPlotly(to_plotly(figs$ct()))
+  output$p_prot <- renderPlotly(to_plotly(figs$prot(), wrap = 70)); output$p_rna <- renderPlotly(to_plotly(figs$rna(), wrap = 70))
+  output$p_bulk <- renderPlotly(to_plotly(figs$bulk(), wrap = 70)); output$p_ct <- renderPlotly(to_plotly(figs$ct(), wrap = 90))
   output$p_share <- renderPlotly(to_plotly(figs$share())); output$p_frac <- renderPlotly(to_plotly(figs$frac()))
-  output$p_states <- renderPlotly(to_plotly(figs$states())); output$p_fibro <- renderPlotly(to_plotly(figs$fibro()))
-  output$p_ductal <- renderPlotly(to_plotly(figs$ductal()))
+  output$p_states <- renderPlotly(to_plotly(figs$states())); output$p_fibro <- renderPlotly(to_plotly(figs$fibro(), wrap = 100))
+  output$p_ductal <- renderPlotly(to_plotly(figs$ductal(), wrap = 75))
 
   # ---- clinical context ----
-  output$p_km <- renderPlotly(to_plotly(figs$km())); output$p_hr <- renderPlotly(to_plotly(figs$hr()))
-  output$p_stage <- renderPlotly(to_plotly(figs$stage())); output$p_moffitt <- renderPlotly(to_plotly(figs$moffitt()))
+  output$p_km <- renderPlotly(to_plotly(figs$km(), wrap = 95)); output$p_hr <- renderPlotly(to_plotly(figs$hr(), wrap = 78))
+  output$p_stage <- renderPlotly(to_plotly(figs$stage(), wrap = 85)); output$p_moffitt <- renderPlotly(to_plotly(figs$moffitt(), wrap = 85))
   clin_csv <- reactive({ x <- cv(); if (is.null(x)) return(data.frame(note = paste("No tumour data for", gene())))
     x$value <- round(x$value, 3); names(x)[names(x) == "value"] <- paste0(gene(), "_value")
     names(x)[names(x) == "moffitt"] <- "moffitt_basal_minus_classical"; x })
@@ -261,8 +276,8 @@ server <- function(input, output, session) {
     selectInput("cx_partner", "Patient samples for", choices = ch, selected = if (isTRUE(isolate(input$cx_partner) %in% t$partner)) isolate(input$cx_partner) else t$partner[1], width = "300px") })
   output$cx_has <- reactive(!is.null(cx())); outputOptions(output, "cx_has", suspendWhenHidden = FALSE)
   cx_n <- reactive({ t <- cx_tab(); if (is.null(t)) 0L else min(sum(t$r > 0), COEXP_SHOW) + min(sum(t$r < 0), 10L) })
-  output$p_coexp <- renderPlotly(to_plotly(figs$coexp(), height = 190 + 20 * max(4, cx_n())))
-  output$p_coexp_pair <- renderPlotly({ validate(need(!is.null(cx()), "")); to_plotly(figs$coexp_pair()) })
+  output$p_coexp <- renderPlotly(to_plotly(figs$coexp(), wrap = 80, height = 190 + 20 * max(4, cx_n())))
+  output$p_coexp_pair <- renderPlotly({ validate(need(!is.null(cx()), "")); to_plotly(figs$coexp_pair(), wrap = 100) })
   cx_table <- reactive({ x <- cx(); req(x); x <- x[x$compartment == cx_cell(), ]
     data.frame(gene = x$partner, name = D$genes$name[match(x$partner, D$genes$symbol)], rho = x$r, fdr = x$q,
                direction = ifelse(x$r > 0, "positive", "negative"), cell_type = as.character(x$compartment), stringsAsFactors = FALSE) })
@@ -280,7 +295,7 @@ server <- function(input, output, session) {
 
   # ---- phosphosites ----
   ph_n_shown <- reactive({ t <- ph_tab(); if (is.null(t)) 0L else min(sum(!is.na(t$p)), PHOSPHO_MAX_PLOT) })
-  output$p_phsites <- renderPlotly(to_plotly(figs$phsites(), height = 190 + 22 * max(4, ph_n_shown())))
+  output$p_phsites <- renderPlotly(to_plotly(figs$phsites(), wrap = 80, height = 190 + 22 * max(4, ph_n_shown())))
   output$ph_site_ui <- renderUI({
     t <- ph_tab(); if (is.null(t)) t <- ph_raw(); if (is.null(t) || !any(!is.na(t$p))) return(NULL)
     tt <- t[!is.na(t$p), ]; ch <- stats::setNames(tt$label, paste0(tt$label, "  (p = ", fmt_p(tt$p), ", ", tt$n_pairs, " pairs)"))
@@ -291,9 +306,10 @@ server <- function(input, output, session) {
     x <- ph(); req(x, input$ph_site); k <- match(input$ph_site, x$sites$label); req(!is.na(k))
     list(pairs = phospho_pairs(x, k, rel), assay = if (rel) "phospho_rel" else "phospho", site = input$ph_site)
   }
+  output$ph_has <- reactive({ t <- ph_raw(); !is.null(t) && any(!is.na(t$p)) }); outputOptions(output, "ph_has", suspendWhenHidden = FALSE)
   ph_any <- reactive({ t <- ph_raw(); !is.null(t) && any(!is.na(t$p)) })
-  output$p_phsite <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite()) })
-  output$p_phsite_rel <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite_rel()) })
+  output$p_phsite <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite(), wrap = 42) })
+  output$p_phsite_rel <- renderPlotly({ validate(need(ph_any(), "")); to_plotly(figs$phsite_rel(), wrap = 42) })
   ph_table_view <- reactive({ t <- ph_tab(); req(t)
     t[order(is.na(t$p), match(t$label, ph()$sites$label)), c("label", "site_id", "peptide", "n_tumours", "n_pairs", "median_normal", "median_tumour", "median_diff", "ci_low", "ci_high", "p", "q", "n_up", "n_down", "values")] })
   output$t_phospho <- renderDT(datatable(ph_table_view(), rownames = FALSE, style = "default", class = "compact stripe hover", extensions = "Buttons",

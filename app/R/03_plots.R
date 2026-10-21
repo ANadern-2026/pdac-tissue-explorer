@@ -17,7 +17,7 @@ src_caption <- function(...) paste0(..., "  |  ", APP_TITLE, " v", APP_VERSION)
 # (also used for one phosphosite: p$assay "phospho" or "phospho_rel" and p$site = the site label)
 plot_cptac_paired <- function(p, symbol, assay = "protein") {
   if (is.null(p) || nrow(p$pairs) < 3) return(empty_plot(paste0(symbol, ": not measured in enough matched patients (", assay, ")")))
-  lab <- switch(p$assay, protein = "Protein abundance (log2, median-normalised)", rna = "RNA (log2 RSEM upper-quartile)",
+  lab <- switch(p$assay, protein = "Protein (log2, median-normalised)", rna = "RNA (log2 RSEM, upper quartile)",
                 phospho = "Phosphosite (log2, median-normalised)", phospho_rel = "Phosphosite minus protein (log2)")
   ttl <- switch(p$assay, protein = paste0(symbol, " protein: tumour vs matched adjacent normal"), rna = paste0(symbol, " RNA: tumour vs matched adjacent normal"),
                 paste0(symbol, " ", p$site, if (p$assay == "phospho_rel") ": relative to protein" else ": phosphosite"))
@@ -64,7 +64,7 @@ plot_phospho_sites <- function(tab, symbol, relative = FALSE, has_sites = !is.nu
 plot_bulk <- function(b, symbol) {
   if (is.null(b)) return(empty_plot(paste0(symbol, " is not in the TCGA/GTEx expression table")))
   b$text <- paste0(b$cohort, "<br>", b$sample, "<br>log2(TPM+1): ", fmt_num(b$value))
-  n <- table(b$cohort); lv <- paste0(levels(b$cohort), "\n(n = ", as.integer(n), ")"); b$x <- factor(lv[as.integer(b$cohort)], levels = lv)
+  n <- table(b$cohort); lv <- paste0(sub(" (", "\n(", levels(b$cohort), fixed = TRUE), "\n(n = ", as.integer(n), ")"); b$x <- factor(lv[as.integer(b$cohort)], levels = lv)
   ggplot(b, aes(x, value)) +
     geom_jitter(aes(colour = cohort, text = text), width = 0.18, height = 0, size = 1.3, alpha = 0.55) +
     geom_boxplot(fill = NA, outlier.shape = NA, width = 0.45, colour = INK[["primary"]], linewidth = 0.35) +
@@ -264,7 +264,7 @@ plot_hr <- function(tab, symbol) {
 
 clin_facet_labels <- function(assoc, kind) {
   r <- assoc[[paste0("rho_", kind)]]; p <- assoc[[paste0("p_", kind)]]; n <- assoc[[paste0("n_", kind)]]
-  stats::setNames(paste0(assoc$dataset, "\n(rho = ", fmt_num(r), ", p = ", fmt_p(p), ", n = ", n, ")"), assoc$dataset)
+  stats::setNames(paste0(assoc$dataset, "\nrho = ", fmt_num(r), ", p = ", fmt_p(p), "\nn = ", n), assoc$dataset)
 }
 plot_stage <- function(cv, assoc, symbol) {
   if (is.null(cv)) return(empty_plot(paste0(symbol, ": no tumour data")))
@@ -279,7 +279,7 @@ plot_stage <- function(cv, assoc, symbol) {
     geom_boxplot(fill = NA, outlier.shape = NA, width = 0.5, colour = INK[["primary"]], linewidth = 0.35) +
     facet_wrap(~facet, scales = "free", nrow = 1) +
     labs(x = "Pathological stage", y = "Tumour value (log2)", title = paste0(symbol, " by tumour stage"),
-         subtitle = "One dot per tumour; rho = Spearman correlation with stage (I < II < III < IV); stages III and IV are combined when either has fewer than 5 tumours\nValues are on each dataset's own scale (TCGA: log2 TPM+1; CPTAC protein: log2 intensity; CPTAC RNA: log2 RSEM)",
+         subtitle = "One dot per tumour; rho = Spearman correlation with stage (I < II < III < IV); III and IV combined when either has < 5 tumours\nEach dataset on its own log2 scale (TCGA: TPM+1; CPTAC: protein intensity, RNA RSEM)",
          caption = src_caption("Data: TCGA-PAAD (recount3; stage from TCGA-CDR) and CPTAC PDAC. Resected tumours: few are stage III-IV in TCGA")) + theme_px()
 }
 plot_moffitt <- function(cv, assoc, symbol, in_score = FALSE) {

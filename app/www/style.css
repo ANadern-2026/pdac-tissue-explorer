@@ -24,3 +24,20 @@ body { background: #fcfcfb; }
 .link-out:hover, .link-out:focus { background: #e7f0fc; text-decoration: none; }
 .link-out::after { content: " \2197"; font-size: 0.75em; color: #52514e; }
 .cx-controls { display: flex; flex-wrap: wrap; gap: 0 24px; align-items: flex-end; }
+/* prototype: gene band + per-tab settings strips */
+.gene-band { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; gap: 1.25rem 2rem; align-items: start;
+  background: #ffffff; border: 1px solid #e9e8e4; border-radius: 8px; padding: 1rem 1.25rem 0.75rem 1.25rem; margin: 0.75rem 0 1rem 0; }
+@media (max-width: 860px) { .gene-band { grid-template-columns: 1fr; } }
+.gene-search .control-label { font-weight: 600; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: #52514e; }
+.gene-search .selectize-input { min-height: 3rem; font-size: 1.15rem; padding: 0.7rem 0.9rem; border: 2px solid #2a78d6; border-radius: 6px; box-shadow: none; }
+.gene-search .selectize-input.focus { box-shadow: 0 0 0 3px #cde2fb; }
+.gene-search .form-group { margin-bottom: 0.35rem; }
+.gene-band-header .gene-header { margin: 0; }
+.settings-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.25rem 1.25rem; background: #f4f3f0; border: 1px solid #e9e8e4;
+  border-radius: 6px; padding: 0.55rem 0.9rem 0.1rem 0.9rem; margin-bottom: 1rem; }
+.strip-label { flex: 0 0 100%; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #8a8984; }
+.strip-controls { display: flex; flex-wrap: wrap; gap: 0 1.5rem; align-items: flex-end; flex: 1 1 auto; }
+.strip-controls .form-group { margin-bottom: 0.5rem; }
+.strip-controls > .shiny-input-container[style*="100%"] { flex: 1 1 100%; }
+.summary-list { max-width: 64rem; }
+.note { max-width: 72rem; }
