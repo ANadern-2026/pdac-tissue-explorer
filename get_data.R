@@ -6,8 +6,9 @@
 #  2. converts them into the on-disk store the app reads (cptac.sqlite, bulk.sqlite, sc.sqlite; data-raw/05_build_store.R),
 #     checking every gene against the downloaded tables. Takes 5-15 minutes and ~2 GB RAM; skipped when up to date.
 # Needs the R packages Matrix, DBI and RSQLite.
-# The phosphosite layer (phospho.sqlite) and gene_xrefs.rds are not part of the v0.1 deposit: until the v0.2 data
-# release they come from data-raw/02b + 04b (optional; the app works without them and an existing copy is kept).
+# The phosphosite, clinical and co-expression layers (phospho.sqlite, clinical.sqlite, coexp.sqlite) and gene_xrefs.rds are
+# not part of the v0.1 deposit: until the v0.2 data release they come from data-raw/01b, 02b, 03b and 04b (optional; the
+# app works without them and an existing copy is kept).
 
 ZENODO_RECORD <- "23264998"
 FILES <- c(                                    # file name = MD5 checksum (as published on Zenodo)

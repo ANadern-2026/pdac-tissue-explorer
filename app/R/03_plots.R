@@ -208,7 +208,122 @@ plot_umap_static <- function(u, symbol, values) {     # values: umap_values() fo
 
 # static export: wrap long titles/subtitles to the page width
 for_export <- function(p, width_in = 8) {
-  w <- function(x, n) if (is.null(x)) NULL else paste(strwrap(x, n), collapse = "\n")
+  w <- function(x, n) if (is.null(x)) NULL else paste(unlist(lapply(strsplit(x, "\n", fixed = TRUE)[[1]], strwrap, width = n)), collapse = "\n")   # keeps explicit line breaks
   p$labels$subtitle <- w(p$labels$subtitle, round(width_in * 10.5)); p$labels$title <- w(p$labels$title, round(width_in * 9))
   p$labels$caption <- w(p$labels$caption, round(width_in * 14)); p
+}
+
+# ---- clinical context ---------------------------------------------------------------------------------------------
+SURV_COLS <- c(High = "#eb6834", Low = "#2a78d6")
+CLIN_SOURCE <- c("TCGA-PAAD RNA" = "TCGA-PAAD via recount3; survival endpoints from the TCGA Pan-Cancer Clinical Data Resource (Liu et al., Cell 2018)",
+                 "CPTAC protein" = "CPTAC PDAC (Cao et al., Cell 2021) via LinkedOmics", "CPTAC RNA" = "CPTAC PDAC (Cao et al., Cell 2021) via LinkedOmics")
+
+# Kaplan-Meier curves of the median split; numbers at risk every 12 months below the curves
+plot_km <- function(km, x, symbol, dataset, endpoint) {
+  what <- tolower(SURV_ENDPOINTS[[endpoint]])
+  if (is.null(x) || !nrow(x)) return(empty_plot(paste0(symbol, ": no ", dataset, " values with ", what)))
+  if (is.null(km)) return(empty_plot(paste0(symbol, " (", dataset, "): too many identical values or too few events for a median split")))
+  st <- km$steps; st$text <- paste0(st$group, " ", symbol, " (", km$n[st$group], " patients)<br>", fmt_num(st$time, 1), " months: ", fmt_pct(st$surv),
+                                    " event-free<br>at risk: ", st$n_risk)
+  cen <- st[st$n_censor > 0, ]
+  ar <- km$at_risk; ar$y <- ifelse(ar$group == "High", -0.07, -0.14)
+  mtxt <- function(g) if (is.na(km$median[[g]])) "not reached" else paste(fmt_num(km$median[[g]], 1), "months")
+  ggplot(st, aes(time, surv, colour = group)) +
+    geom_step(aes(group = group), linewidth = 0.7) + geom_point(aes(text = text), size = 0.1, alpha = 0) +
+    geom_point(data = cen, shape = 3, size = 1.6, stroke = 0.6) +
+    geom_text(data = ar, aes(time, y, label = n, colour = group), size = 3, show.legend = FALSE) +
+    geom_hline(yintercept = 0, colour = INK[["grid"]], linewidth = 0.3) +
+    scale_colour_manual(values = SURV_COLS, guide = "none") +
+    scale_y_continuous(limits = c(-0.17, 1), breaks = seq(0, 1, 0.25), labels = function(v) paste0(round(100 * v), "%")) +
+    scale_x_continuous(breaks = unique(ar$time)) +
+    labs(x = "Months", y = if (endpoint == "os") "Alive" else "Free of progression",
+         title = paste0(symbol, " and ", what, ": ", dataset),
+         subtitle = paste0("Orange = above the median (", km$n[["High"]], " patients, ", km$events[["High"]], " events; median ", mtxt("High"), ")\nblue = at or below (",
+                           km$n[["Low"]], ", ", km$events[["Low"]], "; ", mtxt("Low"), "); log-rank p = ", fmt_p(km$p), "; numbers at risk below the curves"),
+         caption = src_caption("Data: ", CLIN_SOURCE[[dataset]], ". Exploratory; median split, no optimised cut-point")) + theme_px()
+}
+
+# hazard ratio per standard deviation for every dataset and endpoint, unadjusted (filled) and adjusted (open)
+plot_hr <- function(tab, symbol) {
+  if (is.null(tab) || all(is.na(tab$hr))) return(empty_plot(paste0(symbol, ": not enough data for survival models")))
+  tab$row <- factor(sub(": ", "\n", tab$label, fixed = TRUE), levels = rev(unique(sub(": ", "\n", tab$label, fixed = TRUE))))
+  tab$y <- as.numeric(tab$row) + ifelse(tab$model == "unadjusted", 0.15, -0.15)
+  tab$text <- paste0(tab$label, " (", tab$model, ")<br>HR per SD ", fmt_num(tab$hr), " (95% CI ", fmt_num(tab$ci_low), " to ", fmt_num(tab$ci_high), ")<br>p = ",
+                     fmt_p(tab$p), "; ", tab$n, " patients, ", tab$events, " events")
+  tt <- tab[!is.na(tab$hr), ]
+  ggplot(tt, aes(hr, y, text = text)) + geom_vline(xintercept = 1, colour = INK[["muted"]], linewidth = 0.3) +
+    geom_errorbar(aes(xmin = ci_low, xmax = ci_high), width = 0, colour = INK[["secondary"]], linewidth = 0.4, orientation = "y") +
+    geom_point(aes(shape = model), size = 2.6, colour = ONE_SERIES, fill = "white", stroke = 0.8) +
+    scale_shape_manual(values = c("unadjusted" = 16, "adjusted for age and stage" = 21), guide = "none") +
+    scale_x_log10(breaks = c(0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 3, 4), labels = function(v) format(v, drop0trailing = TRUE)) + scale_y_continuous(breaks = seq_along(levels(tab$row)), labels = levels(tab$row), limits = c(0.5, nlevels(tab$row) + 0.5)) +
+    labs(x = "Hazard ratio per SD (log scale)", y = NULL,
+         title = paste0(symbol, ": hazard ratios"), subtitle = "Cox models of the continuous value; > 1 = higher value, shorter survival\nfilled = unadjusted, open = adjusted for age and stage; bars = 95% CI",
+         caption = src_caption("Exploratory: p-values are not adjusted for the many genes one can look at")) + theme_px() +
+    theme(panel.grid.major.y = element_blank())
+}
+
+clin_facet_labels <- function(assoc, kind) {
+  r <- assoc[[paste0("rho_", kind)]]; p <- assoc[[paste0("p_", kind)]]; n <- assoc[[paste0("n_", kind)]]
+  stats::setNames(paste0(assoc$dataset, "\n(rho = ", fmt_num(r), ", p = ", fmt_p(p), ", n = ", n, ")"), assoc$dataset)
+}
+plot_stage <- function(cv, assoc, symbol) {
+  if (is.null(cv)) return(empty_plot(paste0(symbol, ": no tumour data")))
+  x <- cv[!is.na(cv$stage), ]
+  if (!nrow(x)) return(empty_plot(paste0(symbol, ": no tumour data with stage")))
+  x$stage_grp <- ave(x$stage, x$dataset, FUN = function(s) { if (sum(s == "III") < 5 || sum(s == "IV") < 5) s[s %in% c("III", "IV")] <- "III-IV"; s })
+  x$stage_grp <- factor(x$stage_grp, levels = c("I", "II", "III", "IV", "III-IV"))
+  lab <- clin_facet_labels(assoc, "stage"); x$facet <- factor(lab[as.character(x$dataset)], levels = lab[levels(droplevels(x$dataset))])
+  x$text <- paste0(x$dataset, " | stage ", x$stage, "<br>patient ", x$patient, "<br>", symbol, ": ", fmt_num(x$value))
+  ggplot(x, aes(stage_grp, value)) +
+    geom_jitter(aes(text = text), width = 0.18, height = 0, size = 1.3, alpha = 0.55, colour = ONE_SERIES) +
+    geom_boxplot(fill = NA, outlier.shape = NA, width = 0.5, colour = INK[["primary"]], linewidth = 0.35) +
+    facet_wrap(~facet, scales = "free", nrow = 1) +
+    labs(x = "Pathological stage", y = "Tumour value (log2)", title = paste0(symbol, " by tumour stage"),
+         subtitle = "One dot per tumour; rho = Spearman correlation with stage (I < II < III < IV); stages III and IV are combined when either has fewer than 5 tumours\nValues are on each dataset's own scale (TCGA: log2 TPM+1; CPTAC protein: log2 intensity; CPTAC RNA: log2 RSEM)",
+         caption = src_caption("Data: TCGA-PAAD (recount3; stage from TCGA-CDR) and CPTAC PDAC. Resected tumours: few are stage III-IV in TCGA")) + theme_px()
+}
+plot_moffitt <- function(cv, assoc, symbol, in_score = FALSE) {
+  if (is.null(cv)) return(empty_plot(paste0(symbol, ": no tumour data")))
+  x <- cv[is.finite(cv$moffitt), ]
+  lab <- clin_facet_labels(assoc, "moffitt"); x$facet <- factor(lab[as.character(x$dataset)], levels = lab[levels(droplevels(x$dataset))])
+  x$text <- paste0(x$dataset, "<br>patient ", x$patient, "<br>", symbol, ": ", fmt_num(x$value), "<br>basal-like minus classical score: ", fmt_num(x$moffitt))
+  ggplot(x, aes(moffitt, value)) + geom_vline(xintercept = 0, colour = INK[["grid"]], linewidth = 0.4) +
+    geom_point(aes(text = text), size = 1.4, alpha = 0.6, colour = ONE_SERIES) +
+    facet_wrap(~facet, scales = "free", nrow = 1) +
+    labs(x = "Moffitt score: classical  <-  0  ->  basal-like (RNA of the same tumours)", y = "Tumour value (log2)",
+         title = paste0(symbol, " and the classical / basal-like tumour subtype"),
+         subtitle = paste0("Score = mean z-score of 25 basal-like genes minus 25 classical genes (Moffitt et al. 2015); rho = Spearman correlation",
+                           if (in_score) paste0("\nNote: ", symbol, " is one of the score's genes, which inflates the correlation") else ""),
+         caption = src_caption("Data: TCGA-PAAD (recount3) and CPTAC PDAC. Bulk tumours: the score also reflects tumour-cell content")) + theme_px()
+}
+
+# ---- co-expression ------------------------------------------------------------------------------------------------
+plot_coexp <- function(px, symbol, compartment, info) {
+  if (is.null(px) || !nrow(px)) return(empty_plot(paste0(symbol, ": not analysed in ", tolower(compartment), " (expressed in too few cells)")))
+  pos <- utils::head(px[px$r > 0, ], COEXP_SHOW); neg <- utils::head(px[px$r < 0, ][order(px$r[px$r < 0]), ], 10)
+  x <- rbind(pos, neg); x <- x[order(x$r), ]
+  x$cls <- ifelse(x$q < 0.05, ifelse(x$r > 0, "positive", "negative"), "not significant")
+  x$text <- paste0(x$partner, "<br>rho = ", fmt_num(x$r, 3), "<br>FDR = ", fmt_p(x$q))
+  ggplot(x, aes(r, partner, text = text)) + geom_vline(xintercept = 0, colour = INK[["muted"]], linewidth = 0.3) +
+    geom_segment(aes(x = 0, xend = r, yend = partner), colour = INK[["grid"]], linewidth = 0.6) +
+    geom_point(aes(fill = cls), shape = 21, size = 2.6, colour = INK[["primary"]], stroke = 0.3) +
+    scale_fill_manual(values = c(positive = "#eb6834", negative = "#2a78d6", "not significant" = "white"), guide = "none") +
+    scale_y_discrete(limits = x$partner) + scale_x_continuous(limits = c(min(-0.1, min(x$r) - 0.05), max(0.1, max(x$r) + 0.05))) +
+    labs(x = "Spearman's rho across tumour samples (study-adjusted)", y = NULL,
+         title = paste0("Genes co-expressed with ", symbol, " in ", tolower(compartment)),
+         subtitle = paste0(nrow(pos), " most positively and ", nrow(neg), " most negatively correlated genes; ", info$n_samples, " treatment-naive primary tumours from ",
+                           info$n_studies, " studies\nfilled = FDR < 5%, open = not significant; all stored partners are in the table below"),
+         caption = src_caption("Data: Loveless et al., Clin Cancer Res 2025 single-cell atlas; per-sample cell-type averages, centred within study")) + theme_px()
+}
+plot_coexp_pair <- function(pp, symbol, partner, compartment) {
+  if (is.null(pp)) return(empty_plot(paste0("No values for ", partner, " in ", tolower(compartment))))
+  pp$text <- paste0("sample ", pp$sample, " (", pp$study_label, ")<br>", symbol, ": ", fmt_num(pp$x), " (", fmt_signed(pp$xc), " vs study mean)<br>",
+                    partner, ": ", fmt_num(pp$y), " (", fmt_signed(pp$yc), " vs study mean)")
+  ggplot(pp, aes(xc, yc, text = text)) + geom_hline(yintercept = 0, colour = INK[["grid"]]) + geom_vline(xintercept = 0, colour = INK[["grid"]]) +
+    geom_point(size = 1.8, alpha = 0.7, colour = ONE_SERIES) +
+    labs(x = paste0(symbol, ": expression relative to the study mean (log1p CP10k)"), y = paste0(partner, ": relative to the study mean"),
+         title = paste0(symbol, " vs ", partner, " in ", tolower(compartment)),
+         subtitle = paste0("One dot per tumour sample; study-adjusted rho = ", fmt_num(attr(pp, "r"), 3), " (p = ", fmt_p(attr(pp, "p")), ", ", nrow(pp),
+                           " samples); without study adjustment rho = ", fmt_num(attr(pp, "r_raw"), 3)),
+         caption = src_caption("Data: Loveless et al., Clin Cancer Res 2025 single-cell atlas")) + theme_px()
 }

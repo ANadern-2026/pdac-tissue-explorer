@@ -5,7 +5,7 @@ suppressPackageStartupMessages({
   library(shiny); library(bslib); library(ggplot2); library(plotly); library(DT)
 })
 # used via pkg:: or indirectly (includeMarkdown); listed here so deployment tools detect them
-if (FALSE) { library(markdown); library(patchwork); library(scales) }
+if (FALSE) { library(markdown); library(patchwork); library(scales); library(survival) }
 for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f, local = TRUE)
 D <- load_app_data()            # gene index + small tables in memory; per-gene values are read from the on-disk store
 onStop(function() close_app_data(D))
@@ -16,6 +16,10 @@ EXAMPLE_LISTS <- list(
   "Classical vs basal-like tumour cells" = "GATA6, TFF1, LGALS4, CLDN18, KRT17, KRT5, S100A2, VGLL1",
   "Immune checkpoints" = "CD274, PDCD1LG2, PDCD1, CTLA4, LAG3, HAVCR2, TIGIT")
 DEFAULT_GENE <- if (isTRUE(D$has_sc)) { g <- intersect(EXAMPLE_GENES, D$genes$symbol[!is.na(D$genes$sym_sc)]); if (length(g)) g[1] else D$genes$symbol[!is.na(D$genes$sym_sc)][1] } else EXAMPLE_GENES[1]
+
+SURV_CHOICES <- c("TCGA-PAAD RNA: overall survival" = "TCGA-PAAD RNA|os", "TCGA-PAAD RNA: progression-free interval" = "TCGA-PAAD RNA|pfi",
+                  "CPTAC protein: overall survival" = "CPTAC protein|os", "CPTAC RNA: overall survival" = "CPTAC RNA|os")
+MOFFITT_GENES <- if (isTRUE(D$has_clinical)) unique(unlist(D$clin$moffitt)) else character(0)
 
 theme_app <- bs_theme(version = 5, bg = "#fcfcfb", fg = "#0b0b0b", primary = "#2a78d6", secondary = "#52514e",
                       base_font = font_collection("Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
@@ -31,7 +35,12 @@ to_plotly <- function(p, height = NULL) {
     if (!is.null(out$x$data[[i]]$marker$colorbar)) out$x$data[[i]]$marker$colorbar <- modifyList(out$x$data[[i]]$marker$colorbar,
       list(len = 0.85, lenmode = "fraction", y = 0.5, yanchor = "middle", thickness = 14, title = list(text = "Relative<br>expression")))
   }
-  top <- (if (!is.null(sub)) 75 else 45) + (if (faceted) 30 else 0)
+  # multi-line subtitles ("\n") and two-line facet labels get more room; single-line layouts are unchanged
+  sub_lines <- if (is.null(sub)) 0L else length(strsplit(sub, "\n", fixed = TRUE)[[1]])
+  strip_lines <- if (!faceted) 0L else { v <- names(p$facet$params$facets); if (!length(v) || !v[1] %in% names(p$data)) 1L else
+    max(1L, vapply(strsplit(as.character(unique(p$data[[v[1]]])), "\n", fixed = TRUE), length, integer(1))) }
+  top <- (if (sub_lines) 75 + 16 * (sub_lines - 1L) else 45) + 30 * strip_lines
+  if (!is.null(sub)) sub <- gsub("\n", "<br>", sub, fixed = TRUE)
   out <- layout(out, showlegend = FALSE,
                 title = list(text = paste0("<b>", ttl, "</b>", if (!is.null(sub)) paste0("<br><span style='font-size:12px;color:#52514e'>", sub, "</span>") else ""),
                              x = 0, xanchor = "left", font = list(size = 15)),
@@ -81,6 +90,18 @@ ui <- page_navbar(
                "A site is compared only if quantified in both tissues of at least ", PHOSPHO_MIN_PAIRS, " patients (paired Wilcoxon test; false discovery rate across the sites of this gene). ",
                "'Relative to the protein level' subtracts the gene's protein level in the same sample, separating a change in phosphorylation from a change in the amount of protein. ",
                "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity.")),
+        if (isTRUE(D$has_clinical)) nav_panel("Clinical context",
+          radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES),
+          layout_columns(col_widths = c(7, 5), plotlyOutput("p_km", height = "500px"), plotlyOutput("p_hr", height = "500px")),
+          fig_downloads("dl_surv"),
+          note("Kaplan-Meier curves compare tumours above the median with those at or below it (log-rank test). Hazard ratios come from Cox models of the continuous value ",
+               "(per standard deviation within the dataset), unadjusted and adjusted for age and stage. No cut-point was optimised. ",
+               "TCGA-PAAD: overall survival and progression-free interval from the TCGA Pan-Cancer Clinical Data Resource (Liu et al., Cell 2018); CPTAC: overall survival from the study's follow-up."),
+          hr(), plotlyOutput("p_stage", height = "440px"), fig_downloads("dl_stage"), hr(),
+          plotlyOutput("p_moffitt", height = "440px"), fig_downloads("dl_moffitt"),
+          note("These associations are exploratory and observational. Survival after surgery depends on stage, resection margin, adjuvant therapy and tumour-cell content, ",
+               "and with many genes tested, some will show p < 0.05 by chance. Bulk tumour values mix tumour and stromal cells: a gene expressed by stroma can appear ",
+               "'classical' or 'basal-like' because the score partly tracks tumour-cell content. Use these views to generate hypotheses, not as evidence of prognostic value.")),
         nav_panel("Cell types",
           plotlyOutput("p_ct", height = "520px"),
           layout_columns(col_widths = c(6, 6), plotlyOutput("p_share", height = "420px"), plotlyOutput("p_frac", height = "420px")),
@@ -94,6 +115,16 @@ ui <- page_navbar(
           plotlyOutput("p_fibro", height = "460px"), fig_downloads("dl_fibro"), hr(),
           plotlyOutput("p_ductal", height = "440px"), fig_downloads("dl_ductal"),
           note("Fibroblast and tumour-cell subclusters as published with the atlas (Loveless et al., Clin Cancer Res 2025).")),
+        if (isTRUE(D$has_coexp)) nav_panel("Co-expression",
+          div(class = "cx-controls", selectInput("cx_cell", "Cell type", choices = NULL, width = "300px"), uiOutput("cx_partner_ui")),
+          plotlyOutput("p_coexp", height = "auto"),
+          conditionalPanel("output.cx_has", hr(), plotlyOutput("p_coexp_pair", height = "460px"), fig_downloads("dl_coexp"), hr(), DTOutput("t_coexp", fill = FALSE)),
+          note("Genes whose expression rises and falls with the selected gene across patients, within one cell type: for every treatment-naive primary tumour with at least ",
+               MIN_CELLS, " cells of that type, the cell type's average expression; each gene is centred within its study to remove study effects, then genes are compared by ",
+               "Spearman's rank correlation (rho). Only genes detected in at least ", paste0(round(100 * COEXP_MIN_FRAC), "%"), " of the cell type's cells in at least half of the samples are analysed. ",
+               "FDR = false discovery rate across all genes analysed in that cell type. Click a gene in the table to open it. ",
+               "Co-expression can reflect shared regulation, a shared cell state or a changing mix of subtypes within the cell type; it does not show that the proteins interact. ",
+               "Transcripts typical of another cell type (for example tumour keratins in immune cells) can come from ambient RNA; their co-expression then mostly tracks that contamination.")),
         nav_panel("Atlas map",
           layout_columns(col_widths = c(6, 6), plotlyOutput("p_umap", height = "560px"), plotlyOutput("p_umap_ct", height = "560px")),
           fig_downloads("dl_umap"),
@@ -150,6 +181,22 @@ server <- function(input, output, session) {
   ph_rel_p <- reactive({ x <- ph(); if (is.null(x) || !x$has_protein) NULL else phospho_table(x, relative = TRUE, ci = FALSE) })   # summary: p-values only
   ph_relmode <- reactive(identical(input$ph_mode, "rel"))
   ph_tab <- reactive(if (ph_relmode()) ph_rel() else ph_raw())          # NULL: no sites (or, relative, no protein)
+  cv <- reactive(clinical_values(D, gene()))
+  sv_tab <- reactive(surv_table(cv())); cl_assoc <- reactive(clin_assoc(cv()))
+  surv_sel <- reactive({ k <- strsplit(if (is.null(input$surv_set)) SURV_CHOICES[[1]] else input$surv_set, "|", fixed = TRUE)[[1]]; list(dataset = k[1], endpoint = k[2]) })
+  surv_x <- reactive({ x <- cv(); if (is.null(x)) NULL else surv_data(x, surv_sel()$dataset, surv_sel()$endpoint) })
+  km <- reactive({ x <- surv_x(); if (is.null(x) || !nrow(x)) NULL else km_split(x) })
+  in_moffitt <- reactive({ g <- gene(); g %in% MOFFITT_GENES })
+  cx <- reactive(coexp_partners(D, gene()))
+  cx_default <- reactive({ x <- cx(); if (is.null(x)) return(NULL); have <- unique(as.character(x$compartment))
+    s <- cs_naive(); if (!is.null(s)) { sm <- s$summary[!is.na(s$summary$share), ]; o <- as.character(sm$compartment[order(-sm$share)]); o <- o[o %in% have]; if (length(o)) return(o[1]) }
+    have[1] })
+  cx_cell <- reactive({ x <- cx(); req(x); if (isTRUE(input$cx_cell %in% x$compartment)) input$cx_cell else cx_default() })
+  cx_tab <- reactive({ x <- cx(); if (is.null(x)) NULL else x[x$compartment == cx_cell(), ] })
+  cx_info <- reactive(D$coexp_cells[D$coexp_cells$compartment == cx_cell(), ])
+  cx_partner <- reactive({ t <- cx_tab(); req(t, nrow(t)); if (isTRUE(input$cx_partner %in% t$partner)) input$cx_partner else t$partner[1] })
+  cx_pair <- reactive({ t <- cx_tab(); req(t); pt <- cx_partner(); ps <- t$partner_sc[match(pt, t$partner)]; req(!is.na(ps))
+    coexp_pair_values(D, gene(), D$genes$symbol[match(ps, D$genes$sym_sc)], cx_cell()) })
   ph_pairs_n <- if (isTRUE(D$has_phospho)) length(intersect(D$phospho$info$colnames$phospho_tumor, D$phospho$info$colnames$phospho_normal)) else 0L
 
   figs <- list(
@@ -160,6 +207,10 @@ server <- function(input, output, session) {
     ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())),
     phsites = reactive(plot_phospho_sites(ph_tab(), gene(), relative = ph_relmode(), has_sites = !is.null(ph()))),
     phsite = reactive(plot_cptac_paired(ph_site_pairs(FALSE), gene(), "phosphosite")),
+    km = reactive(plot_km(km(), surv_x(), gene(), surv_sel()$dataset, surv_sel()$endpoint)), hr = reactive(plot_hr(sv_tab(), gene())),
+    stage = reactive(plot_stage(cv(), cl_assoc(), gene())), moffitt = reactive(plot_moffitt(cv(), cl_assoc(), gene(), in_moffitt())),
+    coexp = reactive(if (is.null(cx())) empty_plot(paste0(gene(), ": not analysed in any cell type (not in the single-cell data or expressed in too few cells)")) else plot_coexp(cx_tab(), gene(), cx_cell(), cx_info())),
+    coexp_pair = reactive(if (is.null(cx())) empty_plot("") else plot_coexp_pair(cx_pair(), gene(), cx_partner(), cx_cell())),
     phsite_rel = reactive(if (isTRUE(ph()$has_protein)) plot_cptac_paired(ph_site_pairs(TRUE), gene(), "phosphosite") else empty_plot("Protein not quantified")))
 
   output$gene_header <- renderUI({
@@ -178,7 +229,10 @@ server <- function(input, output, session) {
   output$summary_ui <- renderUI({
     g <- gene(); sp <- paired_stats(pr()); sr <- paired_stats(rn())
     items <- list(txt_cptac(pr(), sp, g, "protein"), txt_cptac(rn(), sr, g, "rna"),
-                  if (isTRUE(D$has_phospho)) txt_phospho(ph_raw(), ph_rel_p(), g, ph_pairs_n), txt_bulk(bk(), g), txt_sc(cs_naive(), g), txt_state(sv(), g))
+                  if (isTRUE(D$has_phospho)) txt_phospho(ph_raw(), ph_rel_p(), g, ph_pairs_n), txt_bulk(bk(), g),
+                  if (isTRUE(D$has_clinical)) txt_survival(sv_tab(), g), if (isTRUE(D$has_clinical)) txt_clin_assoc(cl_assoc(), g, in_moffitt()),
+                  txt_sc(cs_naive(), g), txt_state(sv(), g),
+                  if (isTRUE(D$has_coexp) && !is.null(cx())) txt_coexp(cx(), g, cx_default(), D$coexp_cells[D$coexp_cells$compartment == cx_default(), ]))
     items <- Filter(Negate(is.null), items)
     tagList(tags$ul(class = "summary-list", lapply(items, tags$li)),
             note("These sentences describe the data; they do not establish mechanism or causality. p-values are unadjusted and refer to the single comparison stated. ",
@@ -190,6 +244,39 @@ server <- function(input, output, session) {
   output$p_share <- renderPlotly(to_plotly(figs$share())); output$p_frac <- renderPlotly(to_plotly(figs$frac()))
   output$p_states <- renderPlotly(to_plotly(figs$states())); output$p_fibro <- renderPlotly(to_plotly(figs$fibro()))
   output$p_ductal <- renderPlotly(to_plotly(figs$ductal()))
+
+  # ---- clinical context ----
+  output$p_km <- renderPlotly(to_plotly(figs$km())); output$p_hr <- renderPlotly(to_plotly(figs$hr()))
+  output$p_stage <- renderPlotly(to_plotly(figs$stage())); output$p_moffitt <- renderPlotly(to_plotly(figs$moffitt()))
+  clin_csv <- reactive({ x <- cv(); if (is.null(x)) return(data.frame(note = paste("No tumour data for", gene())))
+    x$value <- round(x$value, 3); names(x)[names(x) == "value"] <- paste0(gene(), "_value")
+    names(x)[names(x) == "moffitt"] <- "moffitt_basal_minus_classical"; x })
+
+  # ---- co-expression ----
+  observe({ x <- cx(); if (is.null(x)) { updateSelectInput(session, "cx_cell", choices = character(0)); return() }
+    have <- intersect(CELLTYPE_ORDER, as.character(x$compartment))
+    updateSelectInput(session, "cx_cell", choices = have, selected = if (isTRUE(isolate(input$cx_cell) %in% have)) isolate(input$cx_cell) else cx_default()) })
+  output$cx_partner_ui <- renderUI({ t <- cx_tab(); if (is.null(t) || !nrow(t)) return(NULL)
+    ch <- stats::setNames(t$partner, paste0(t$partner, "  (rho = ", fmt_num(t$r, 3), ")"))
+    selectInput("cx_partner", "Patient samples for", choices = ch, selected = if (isTRUE(isolate(input$cx_partner) %in% t$partner)) isolate(input$cx_partner) else t$partner[1], width = "300px") })
+  output$cx_has <- reactive(!is.null(cx())); outputOptions(output, "cx_has", suspendWhenHidden = FALSE)
+  cx_n <- reactive({ t <- cx_tab(); if (is.null(t)) 0L else min(sum(t$r > 0), COEXP_SHOW) + min(sum(t$r < 0), 10L) })
+  output$p_coexp <- renderPlotly(to_plotly(figs$coexp(), height = 190 + 20 * max(4, cx_n())))
+  output$p_coexp_pair <- renderPlotly({ validate(need(!is.null(cx()), "")); to_plotly(figs$coexp_pair()) })
+  cx_table <- reactive({ x <- cx(); req(x); x <- x[x$compartment == cx_cell(), ]
+    data.frame(gene = x$partner, name = D$genes$name[match(x$partner, D$genes$symbol)], rho = x$r, fdr = x$q,
+               direction = ifelse(x$r > 0, "positive", "negative"), cell_type = as.character(x$compartment), stringsAsFactors = FALSE) })
+  output$t_coexp <- renderDT({ t <- cx_table()
+    t$open <- sprintf("<a href=\"#\" class=\"goto-gene\" data-gene=\"%s\">open</a>", htmltools::htmlEscape(t$gene))
+    datatable(t[, c("gene", "open", "name", "rho", "fdr", "direction", "cell_type")], rownames = FALSE, escape = -2, style = "default", class = "compact stripe hover",
+              extensions = "Buttons", colnames = c("gene", "", "name", "rho", "FDR", "direction", "cell type"),
+              callback = JS("table.on('click', 'a.goto-gene', function(e) { e.preventDefault(); Shiny.setInputValue('goto_gene', $(this).data('gene'), {priority: 'event'}); });"),
+              options = list(pageLength = 10, dom = "Bfrtip", buttons = dt_buttons(gene(), paste0("coexpression_", gsub("[^A-Za-z]+", "_", cx_cell()))),
+                             columnDefs = list(list(orderable = FALSE, targets = 1)))) |>
+      formatRound("rho", 3, mark = "") |> formatSignif("fdr", 2) }, server = FALSE)
+  observeEvent(input$goto_gene, { g <- input$goto_gene; if (isTRUE(g %in% D$genes$symbol)) updateSelectizeInput(session, "gene", choices = gene_df, selected = g, server = TRUE) })
+  cx_csv <- reactive({ x <- cx(); if (is.null(x)) return(data.frame(note = paste(gene(), "was not analysed in any cell type")))
+    data.frame(gene = gene(), cell_type = as.character(x$compartment), partner = x$partner, rho = x$r, fdr = signif(x$q, 2)) })
 
   # ---- phosphosites ----
   ph_n_shown <- reactive({ t <- ph_tab(); if (is.null(t)) 0L else min(sum(!is.na(t$p)), PHOSPHO_MAX_PLOT) })
@@ -279,6 +366,10 @@ server <- function(input, output, session) {
              dl_states = list(stub = "tissue_states", plots = function() list(figs$states()), data = sc_table, w = 11, h = 8),
              dl_fibro = list(stub = "fibroblast_subtypes", plots = function() list(figs$fibro()), data = sc_table, w = 9, h = 5),
              dl_ductal = list(stub = "tumour_cell_states", plots = function() list(figs$ductal()), data = sc_table, w = 9, h = 5),
+             dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr()), data = clin_csv, w = 8, h = 6),
+             dl_stage = list(stub = "stage", plots = function() list(figs$stage()), data = clin_csv, w = 11, h = 5),
+             dl_moffitt = list(stub = "classical_basal", plots = function() list(figs$moffitt()), data = clin_csv, w = 11, h = 5),
+             dl_coexp = list(stub = "coexpression", plots = function() list(figs$coexp(), figs$coexp_pair()), data = cx_csv, w = 8, h = 9),
              dl_umap = list(stub = "atlas_map", plots = function() list(figs$umap()), data = function() data.frame(note = "Atlas map values are a subsample; see the Data tab for per-sample values."), w = 7, h = 6))
   for (k in names(dl)) local({ kk <- k; s <- dl[[kk]]
     output[[paste0(kk, "_pdf")]] <- downloadHandler(fname(s$stub, "pdf"), function(file) save_figs(file, s$plots(), s$w, s$h, "pdf"))

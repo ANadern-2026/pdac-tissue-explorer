@@ -23,3 +23,4 @@ body { background: #fcfcfb; }
 .link-out { color: #184f95; text-decoration: none; border: 1px solid #cde2fb; border-radius: 4px; padding: 0.05rem 0.45rem; }
 .link-out:hover, .link-out:focus { background: #e7f0fc; text-decoration: none; }
 .link-out::after { content: " \2197"; font-size: 0.75em; color: #52514e; }
+.cx-controls { display: flex; flex-wrap: wrap; gap: 0 24px; align-items: flex-end; }

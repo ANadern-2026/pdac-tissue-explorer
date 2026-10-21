@@ -132,6 +132,41 @@ test_that("the optional phosphosite layer is skipped without its source, then bu
   msg <- capture_messages(build_store(tmp, layers = "phospho", log = FALSE)); expect_true(any(grepl("existing phospho.sqlite kept", msg)))
 })
 
+test_that("the optional clinical and co-expression layers are built and read exactly", {
+  expect_false(D$has_clinical); expect_false(D$has_coexp); expect_null(clinical_values(D, "MSLN")); expect_null(coexp_partners(D, "MSLN"))
+  set.seed(13)
+  tc <- colnames(src$cptac$rna_tumor); ts <- src$bulk$samples$sample[src$bulk$samples$cohort == "PDAC (TCGA)"]
+  cl <- list(cptac = data.frame(case_id = tc, age = 60, sex = "Male", stage = sample(c("I", "II", "III"), length(tc), TRUE), stage_detail = "x", residual_tumor = "R0",
+                                os_time = round(runif(length(tc), 10, 900)), os_event = rbinom(length(tc), 1, 0.6), moffitt = round(rnorm(length(tc)), 3), stringsAsFactors = FALSE),
+             tcga = data.frame(sample = ts, patient = paste0("TCGA-XX-", seq_along(ts)), barcode = "b", age = 70, sex = "Female", stage = "II", stage_detail = "Stage IIB",
+                               os_time = round(runif(length(ts), 10, 900)), os_event = 1L, pfi_time = 100, pfi_event = 0L, moffitt = round(rnorm(length(ts)), 3), stringsAsFactors = FALSE),
+             moffitt = list(basal = "KRT17", classical = "GATA6"), moffitt_used = list(), source = list(note = "synthetic"))
+  saveRDS(cl, file.path(tmp, "clinical.rds"))
+  groups <- prepare_sc_groups(src$groups); u <- coexp_units(groups, "Fibroblasts", min_study = 1L)
+  tp <- coexp_top_pairs(src$expr$mean_cp10k_x100, src$expr$frac_x10000, u, min_frac = 0, top_pos = 4, top_neg = 3)
+  saveRDS(list(pairs = data.frame(compartment = 1L, tp$pairs, row.names = NULL), genes = src$expr$genes, compartments = CELLTYPE_ORDER,
+               info = data.frame(compartment = "Fibroblasts", n_samples = length(u$samples), n_studies = 1L, df = tp$df, n_genes = tp$n_genes, studies = "GSE1"),
+               settings = list(), note = "synthetic", built = "now"), file.path(tmp, "sc_coexp.rds"))
+  suppressMessages(build_store(tmp, layers = c("clinical", "coexp"), log = FALSE))
+  D3 <- load_app_data(tmp); on.exit(close_app_data(D3))
+  expect_true(D3$has_clinical && D3$has_coexp)
+  expect_identical(D3$clin$cptac, cl$cptac); expect_identical(D3$clin$tcga, cl$tcga)
+  cv <- clinical_values(D3, "MSLN")
+  expect_identical(levels(droplevels(cv$dataset)), c("TCGA-PAAD RNA", "CPTAC protein", "CPTAC RNA"))
+  x <- cv[cv$dataset == "CPTAC protein", ]; pt <- src$cptac$protein_tumor["MSLN", ]
+  expect_equal(x$value, unname(pt[x$patient])); expect_equal(nrow(x), sum(is.finite(pt)))
+  y <- cv[cv$dataset == "TCGA-PAAD RNA", ]; expect_equal(y$value, unname(src$bulk$log2tpm_x1000["MSLN", ts] / 1000)); expect_equal(y$moffitt, cl$tcga$moffitt)
+  expect_null(clinical_values(D3, "S4"))                                       # single-cell only gene
+  px <- coexp_partners(D3, "MSLN"); i <- match("MSLN", src$expr$genes)
+  ref <- tp$pairs[tp$pairs$gene == i, ]; ref <- ref[order(-ref$r, ref$partner), ]          # stored order: rho, then partner
+  expect_identical(px$partner_sc, src$expr$genes[ref$partner]); expect_equal(px$r, ref$r)
+  expect_equal(px$q, ref$q, tolerance = 0.03)                                  # stored as -log10(q) x100
+  pv <- coexp_pair_values(D3, "MSLN", px$partner[1], "Fibroblasts")
+  expect_equal(round(attr(pv, "r"), 3), px$r[1]); expect_identical(pv$sample, u$samples)
+  file.remove(file.path(tmp, c("clinical.rds", "sc_coexp.rds")))
+  msg <- capture_messages(build_store(tmp, layers = c("clinical", "coexp"), log = FALSE)); expect_true(any(grepl("existing coexp.sqlite kept", msg)))
+})
+
 test_that("the builder skips up-to-date layers and the app refuses stores of another format", {
   msg <- capture_messages(build_store(tmp, log = FALSE)); expect_true(any(grepl("up to date", msg)))
   con <- DBI::dbConnect(RSQLite::SQLite(), file.path(tmp, "bulk.sqlite"))

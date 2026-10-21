@@ -5,6 +5,16 @@ MIN_CELLS   <- 20L          # a sample contributes to a cell-type summary only w
 BOOT_N      <- 1000L        # bootstrap resamples for confidence intervals of median changes
 PHOSPHO_MIN_PAIRS <- 10L    # a phosphosite is compared only if quantified in tumour and normal tissue of >= this many patients
 PHOSPHO_MAX_PLOT  <- 50L    # the site overview plot shows at most this many sites (those with the smallest p-values)
+COEXP_STATE       <- "Primary tumour"   # co-expression across samples: treatment-naive primary tumours only (data-raw/01b)
+COEXP_MIN_STUDY   <- 3L     # ... from studies contributing at least this many samples of the cell type (study effects are removed)
+COEXP_MIN_SAMPLES <- 20L    # a cell type is analysed only with at least this many such samples
+COEXP_MIN_FRAC    <- 0.02   # a gene is analysed in a cell type only if detected in >= 2% of its cells in at least half of the samples
+COEXP_TOP_POS     <- 50L    # partners stored per gene and cell type: the most positively ...
+COEXP_TOP_NEG     <- 20L    # ... and the most negatively correlated genes
+COEXP_SHOW        <- 25L    # partners shown in the co-expression plot (all stored partners are in the table)
+SURV_MIN_GROUP    <- 10L    # Kaplan-Meier median split only if each group has at least this many patients
+SURV_MIN_EVENTS   <- 10L    # survival models only with at least this many events
+DAYS_PER_MONTH    <- 365.25 / 12
 
 # validated categorical palette (dataviz reference instance, light mode); fixed order, never cycled
 STATE_LEVELS <- c("Healthy donor", "Adjacent normal", "Primary tumour", "Liver metastasis", "Primary tumour (treated)")

@@ -65,3 +65,19 @@ references:
     volume: 369
     start: 1318
     doi: "10.1126/science.aaz1776"
+  - type: article
+    title: "An integrated TCGA pan-cancer clinical data resource to drive high-quality survival outcome analytics"
+    authors: [{family-names: "Liu", given-names: "Jianfang"}]
+    journal: "Cell"
+    year: 2018
+    volume: 173
+    start: 400
+    doi: "10.1016/j.cell.2018.02.052"
+  - type: article
+    title: "Virtual microdissection identifies distinct tumor- and stroma-specific subtypes of pancreatic ductal adenocarcinoma"
+    authors: [{family-names: "Moffitt", given-names: "Richard A."}]
+    journal: "Nature Genetics"
+    year: 2015
+    volume: 47
+    start: 1168
+    doi: "10.1038/ng.3398"

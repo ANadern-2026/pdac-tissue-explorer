@@ -2,6 +2,7 @@
 start_log <- function(name, dir = file.path("data-raw", "logs")) {
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   f <- file.path(dir, paste0(name, "_", format(Sys.Date()), ".txt"))
+  k <- 1L; while (file.exists(f)) { k <- k + 1L; f <- file.path(dir, paste0(name, "_", format(Sys.Date()), "_", k, ".txt")) }   # never overwrite an earlier log
   cat(name, " started ", format(Sys.time(), tz = "UTC"), " UTC\n", file = f, sep = "")
   f
 }

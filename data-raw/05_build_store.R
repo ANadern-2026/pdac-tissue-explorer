@@ -10,9 +10,14 @@
 #   phospho.sqlite table  site               record = list(site, peptide, tumor, normal): all phosphosites of one gene
 #                                            (values flattened site-major-by-column, i.e. as.vector() of the sites x samples matrix)
 #                                            optional layer (02b); info$gene_map links index symbols to phospho symbols
+#   clinical.sqlite info only                 per-tumour clinical tables (survival, stage, Moffitt score) of CPTAC and TCGA;
+#                                            optional layer (03b)
+#   coexp.sqlite  table  partners           record = list(compartment, partner, r_x1000, q_mlog10_x100): the most co-expressed
+#                                            genes of one gene in each cell type (indices into info$genes / info$compartments);
+#                                            optional layer (01b)
 # Small tables (sample metadata, column names, single-cell groups, UMAP coordinates) go into each file's
 # `info` table. Every record is decoded again after writing and compared with the source (identical()).
-# Run from the repository root after 01-04 (and 02b):  source("data-raw/05_build_store.R")
+# Run from the repository root after 01-04 (and 01b, 02b, 03b):  source("data-raw/05_build_store.R")
 # get_data.R calls build_store() itself. Peak memory ~2 GB (single-cell layer); ~6 min.
 # =====================================================================================================
 suppressPackageStartupMessages({ library(Matrix); library(DBI); library(RSQLite) })
@@ -190,6 +195,38 @@ build_phospho <- function(dir, say) {
   out
 }
 
+build_clinical <- function(dir, say) {          # small per-patient tables only: everything goes into info
+  src <- file.path(dir, "clinical.rds"); x <- readRDS(src); out <- file.path(dir, STORE_LAYERS[["clinical"]])
+  keys <- c("cptac", "tcga", "moffitt", "moffitt_used", "source")
+  s <- store_create(out, "clinical", list(), c(x[keys], list(source_md5 = unname(tools::md5sum(src)))))
+  store_finish(s)
+  st <- store_open(s$part); ok <- vapply(keys, function(k) identical(st$info[[k]], x[[k]]), logical(1)); store_close(st)
+  if (!all(ok)) stop("clinical.sqlite: info differs from the source for ", paste(keys[!ok], collapse = ", "))
+  say("clinical.sqlite: ", nrow(x$cptac), " CPTAC and ", nrow(x$tcga), " TCGA tumours verified")
+  store_publish(s)
+  out
+}
+
+# co-expression partners (01b): one record per single-cell gene symbol with every cell type in which it was analysed
+coexp_record <- function(tab) {
+  o <- order(tab$compartment, -tab$r, tab$partner); tab <- tab[o, ]
+  list(compartment = as.integer(tab$compartment), partner = as.integer(tab$partner), r_x1000 = as.integer(round(tab$r * 1000)),
+       q_mlog10_x100 = as.integer(pmin(round(-log10(pmax(tab$q, 1e-300)) * 100), 30000L)))
+}
+build_coexp <- function(dir, say) {
+  src <- file.path(dir, "sc_coexp.rds"); x <- readRDS(src); out <- file.path(dir, STORE_LAYERS[["coexp"]])
+  rows <- split(seq_len(nrow(x$pairs)), x$pairs$gene); ids <- x$genes[as.integer(names(rows))]; check_ids(ids, "coexp")
+  rec <- function(k) coexp_record(x$pairs[rows[[k]], c("compartment", "partner", "r", "q")])
+  s <- store_create(out, "coexp", c(partners = "rds-gzip"),
+                    list(genes = x$genes, compartments = x$compartments, cell_types = x$info, settings = x$settings, note = x$note,
+                         source_md5 = unname(tools::md5sum(src)), built_from = x$built))
+  for (k in chunks(length(ids))) store_write(s, "partners", ids[k], lapply(k, function(j) pack_rds(rec(j), "gzip")))
+  store_finish(s)
+  say("coexp.sqlite/partners: ", verify_table(s$part, "partners", ids, rec), " genes (", nrow(x$pairs), " pairs) verified")
+  store_publish(s)
+  out
+}
+
 # every gene of the search index must have a record under its dataset symbol
 check_index <- function(dir, say) {
   g <- readRDS(file.path(dir, "genes.rds"))$genes
@@ -207,31 +244,39 @@ check_index <- function(dir, say) {
     if (!all(map$symbol %in% g$symbol)) stop("phospho.sqlite: gene map refers to symbols missing from genes.rds; rebuild the phospho layer")
     if (!all(map$sym_cptac_phospho %in% ids)) stop("phospho.sqlite: gene map refers to genes without a record")
   }
+  path <- file.path(dir, STORE_LAYERS[["coexp"]])
+  if (file.exists(path)) {
+    st <- store_open(path); sc_genes <- st$info$genes; store_close(st)
+    if (!all(stats::na.omit(g$sym_sc) %in% sc_genes)) stop("coexp.sqlite: built from other single-cell genes than genes.rds; rebuild 01b and the coexp layer")
+  }
   say("gene index: all ", nrow(g), " genes resolve to stored records")
 }
 
-# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho". Layers whose store file is newer
-# than its source .rds files are skipped unless force = TRUE. The single-cell and phosphosite layers are optional: without
-# their source files they are skipped (an existing store file is kept).
-build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho"), force = FALSE, log = TRUE) {
+# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho", "clinical", "coexp". Layers whose store
+# file is newer than its source .rds files are skipped unless force = TRUE. The single-cell, phosphosite, clinical and
+# co-expression layers are optional: without their source files they are skipped (an existing store file is kept).
+build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho", "clinical", "coexp"), force = FALSE, log = TRUE) {
   log_file <- NULL
   if (log && file.exists(file.path("data-raw", "helpers.R")) && file.access("data-raw", 2) == 0) {
     source(file.path("data-raw", "helpers.R"), local = TRUE); log_file <- start_log("05_build_store")
   }
   say <- function(...) if (is.null(log_file)) message(...) else logc(log_file, ...)
-  srcs <- list(cptac = "cptac.rds", bulk = "bulk_tcga_gtex.rds", sc = c("sc_groups.rds", "sc_expr.rds", "sc_umap.rds"), phospho = c("cptac_phospho.rds", "genes.rds"))
+  srcs <- list(cptac = "cptac.rds", bulk = "bulk_tcga_gtex.rds", sc = c("sc_groups.rds", "sc_expr.rds", "sc_umap.rds"), phospho = c("cptac_phospho.rds", "genes.rds"),
+               clinical = "clinical.rds", coexp = "sc_coexp.rds")
+  optional <- c("phospho", "clinical", "coexp")      # skipped without their source files (an existing store file is kept)
   for (l in layers) {
     out <- file.path(dir, STORE_LAYERS[[l]]); src <- file.path(dir, srcs[[l]]); src <- src[file.exists(src)]
     if (l == "sc" && !all(file.exists(file.path(dir, c("sc_groups.rds", "sc_expr.rds"))))) { say("sc: source files not found, skipped"); next }
-    if (l == "phospho" && !all(file.exists(file.path(dir, srcs$phospho)))) {
-      say("phospho: source files not found, skipped", if (file.exists(out)) " (existing phospho.sqlite kept)" else ""); next }
+    if (l %in% optional && !all(file.exists(file.path(dir, srcs[[l]])))) {
+      say(l, ": source files not found, skipped", if (file.exists(out)) paste0(" (existing ", basename(out), " kept)") else ""); next }
     if (!length(src)) stop(l, ": source file(s) not found in ", dir)
     if (!force && file.exists(out) && all(file.mtime(out) > file.mtime(src))) {
       ok <- tryCatch({ st <- store_open(out); store_close(st); TRUE }, error = function(e) FALSE)
       if (ok) { say(basename(out), ": up to date, skipped"); next }
     }
     t0 <- Sys.time(); say(l, ": building ", basename(out), " from ", paste(basename(src), collapse = ", "), " ...")
-    switch(l, cptac = build_cptac(dir, say), bulk = build_bulk(dir, say), sc = build_sc(dir, say), phospho = build_phospho(dir, say))
+    switch(l, cptac = build_cptac(dir, say), bulk = build_bulk(dir, say), sc = build_sc(dir, say), phospho = build_phospho(dir, say),
+           clinical = build_clinical(dir, say), coexp = build_coexp(dir, say))
     invisible(gc())
     say(basename(out), ": ", round(file.size(out) / 2^20, 1), " MB, MD5 ", unname(tools::md5sum(out)), ", ", round(as.numeric(Sys.time() - t0, units = "mins"), 1), " min")
   }

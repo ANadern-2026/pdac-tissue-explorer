@@ -118,3 +118,41 @@ parse_gene_list <- function(txt, d) {
   }
   list(genes = unique(hit), missing = miss)
 }
+
+# ---- clinical context and co-expression -----------------------------------------------------------------------
+txt_survival <- function(tab, symbol) {
+  if (is.null(tab)) return(NULL)
+  u <- tab[tab$model == "unadjusted" & !is.na(tab$hr), ]
+  if (!nrow(u)) return(paste0("Survival: not enough data for ", symbol, "."))
+  each <- paste0(u$label, " ", fmt_num(u$hr), " (95% CI ", fmt_num(u$ci_low), "-", fmt_num(u$ci_high), ", p = ", fmt_p(u$p), ")")
+  sig <- u[u$p < 0.05, ]
+  verdict <- if (!nrow(sig)) "no dataset shows a clear association (p < 0.05)" else
+    paste0("p < 0.05 in ", paste0(sig$label, " (higher values with ", ifelse(sig$hr > 1, "shorter", "longer"), " survival)", collapse = "; "))
+  paste0("Survival (exploratory; Cox model, hazard ratio per standard deviation, > 1 = higher values with shorter survival): ", paste(each, collapse = "; "),
+         ". ", toupper(substr(verdict, 1, 1)), substr(verdict, 2, nchar(verdict)), ". Not corrected for testing many genes; see the Clinical context tab, including models adjusted for age and stage.")
+}
+
+txt_clin_assoc <- function(a, symbol, in_score = FALSE) {
+  if (is.null(a) || !nrow(a)) return(NULL)
+  part <- function(kind, hi, lo) {
+    r <- a[[paste0("rho_", kind)]]; p <- a[[paste0("p_", kind)]]; ok <- !is.na(r)
+    if (!any(ok)) return("too few tumours")
+    each <- paste0(fmt_num(r[ok]), " (", a$dataset[ok], ", p = ", fmt_p(p[ok]), ")")
+    s <- ok & p < 0.05; dir <- function(x) paste("higher in", if (x > 0) hi else lo)
+    v <- if (!any(s)) "no clear association" else if (length(unique(sign(r[s]))) > 1) "inconsistent between datasets" else
+      if (sum(s) >= 2 || sum(ok) == 1) dir(r[s][1]) else paste0("p < 0.05 only in ", a$dataset[s], " (", dir(r[s]), ")")
+    paste0(v, "; rho = ", paste(each, collapse = ", "))
+  }
+  paste0("Tumour subtype and stage (Spearman correlation across tumours): with the basal-like minus classical score: ", part("moffitt", "basal-like tumours", "classical tumours"),
+         if (in_score) paste0(" (", symbol, " is itself one of the score's genes)") else "", ". With stage: ", part("stage", "higher-stage tumours", "lower-stage tumours"), ".")
+}
+
+txt_coexp <- function(px, symbol, compartment, info) {
+  if (is.null(px) || is.null(compartment)) return(NULL)
+  x <- px[px$compartment == compartment & px$r > 0 & px$q < 0.05, ]
+  head <- paste0("Co-expression (single-cell, ", prose(compartment), " of ", info$n_samples, " treatment-naive tumours, study-adjusted): ")
+  if (!nrow(x)) return(paste0(head, "no gene correlates with ", symbol, " at FDR < 5%."))
+  x <- utils::head(x, 5)
+  paste0(head, "most correlated across tumours are ", paste0(x$partner, " (rho = ", fmt_num(x$r), ")", collapse = ", "),
+         ". Co-expression across patients suggests shared regulation or a shared cell state, not a physical or functional interaction.")
+}

@@ -8,7 +8,7 @@ An interactive web app for exploring where any human gene is expressed in pancre
 
 ## What you can do
 
-- **Explore a gene.** A plain-language summary, then sample-level views: paired tumour vs adjacent-normal protein, RNA and phosphosites (CPTAC; phosphosites also relative to the protein level), PDAC vs healthy pancreas (TCGA/GTEx), expression by cell type with transcript shares, expression across tissue states per cell type, fibroblast and tumour-cell subtypes, and the gene on the atlas map. Search by symbol, alias or full name; links to the gene's pages at NCBI Gene, UniProt, the Human Protein Atlas, Open Targets and DepMap.
+- **Explore a gene.** A plain-language summary, then sample-level views: paired tumour vs adjacent-normal protein, RNA and phosphosites (CPTAC; phosphosites also relative to the protein level), PDAC vs healthy pancreas (TCGA/GTEx), expression by cell type with transcript shares, expression across tissue states per cell type, fibroblast and tumour-cell subtypes, the gene on the atlas map, its clinical context (survival, stage and the classical/basal-like tumour subtype in TCGA-PAAD and CPTAC) and the genes it is co-expressed with within each cell type across tumours. Search by symbol, alias or full name; links to the gene's pages at NCBI Gene, UniProt, the Human Protein Atlas, Open Targets and DepMap.
 - **Compare genes.** Up to 40 genes at once as a cell-type dot heatmap and a tumour-vs-normal forest plot.
 - **Download.** Every figure as PDF/PNG and the underlying per-sample values as CSV.
 
@@ -16,7 +16,8 @@ An interactive web app for exploring where any human gene is expressed in pancre
 
 | Dataset | Content used | Reference |
 |---|---|---|
-| CPTAC PDAC (LinkedOmics) | Gene-level proteome and RNA, site-level phosphoproteome; 135 PDAC tumours, 64 protein/phosphosite and 19 RNA tumour–normal pairs | Cao L. et al., *Cell* 2021;184:5031 |
+| CPTAC PDAC (LinkedOmics) | Gene-level proteome and RNA, site-level phosphoproteome, clinical data (stage, overall survival); 135 PDAC tumours, 64 protein/phosphosite and 19 RNA tumour–normal pairs | Cao L. et al., *Cell* 2021;184:5031 |
+| TCGA Pan-Cancer Clinical Data Resource | Overall survival and progression-free interval, stage, age for the TCGA-PAAD tumours | Liu J. et al., *Cell* 2018;173:400 |
 | TCGA-PAAD + GTEx pancreas (recount3) | Bulk RNA: 147 PDAC (ductal histology), 4 adjacent normal, 330 healthy pancreas | Wilks C. et al., *Genome Biol* 2021;22:323; TCGA, *Cancer Cell* 2017; GTEx, *Science* 2020 |
 | PDAC single-cell atlas | ~620,000 cells, 234 samples from 12 studies, with published cell-type, tumour-cell and fibroblast subclusters | Loveless I.M. et al., *Clin Cancer Res* 2025;31:756 (Zenodo 10.5281/zenodo.14199536) |
 
@@ -33,9 +34,11 @@ get_data.R           downloads the prepared data files from Zenodo (checksum-ver
 data-raw/            data preparation, run in order:
   00_scatlas_readiness.R   filtering of the published atlas object (cycling cells, ambient-RNA outliers)
   01_scatlas_summaries.R   per-sample x cell-type summaries, atlas map subsample
+  01b_sc_coexpression.R    co-expression within each cell type across tumour samples (from the 01 summaries)
   02_cptac.R               CPTAC download and processing
   02b_cptac_phospho.R      CPTAC phosphosites (site level)
   03_recount3.R            TCGA-PAAD / GTEx via recount3
+  03b_clinical.R           survival, stage and classical/basal-like (Moffitt) score of the CPTAC and TCGA tumours
   04_gene_index.R          searchable gene index, symbol reconciliation across datasets
   04b_gene_xrefs.R         Ensembl IDs and gene types for the links to other resources
   05_build_store.R         on-disk data store: one SQLite file per dataset, one compressed record per gene
@@ -49,7 +52,7 @@ deploy/server/                  self-hosting on a server: Docker Compose + Caddy
 
 ## Run it locally
 
-Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `markdown`, `patchwork`, `scales`.
+Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `survival`, `markdown`, `patchwork`, `scales`.
 
 ```r
 source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/ and builds the data store
@@ -64,18 +67,20 @@ The app reads each gene's values on demand from the data store (`app/data/*.sqli
 source("data-raw/02_cptac.R")        # downloads from LinkedOmics
 source("data-raw/02b_cptac_phospho.R")  # phosphosites, from LinkedOmics
 source("data-raw/03_recount3.R")     # needs Bioconductor recount3 on the first run
+source("data-raw/03b_clinical.R")    # clinical data: LinkedOmics, TCGA-CDR (GDC) and recount3 sample metadata; needs readxl
 # single-cell: download scAtlas.rds from Zenodo, then
 source("data-raw/00_scatlas_readiness.R")   # ~ several hours; produces sc_ref_base.rds
 source("data-raw/01_scatlas_summaries.R")   # ~ 1 h, ~50 GB RAM; set the paths at the top
 source("data-raw/04_gene_index.R")
 source("data-raw/04b_gene_xrefs.R")         # identifiers for the links to other resources
+source("data-raw/01b_sc_coexpression.R")    # ~15 min; co-expression partners per cell type
 source("data-raw/05_build_store.R")         # converts the tables into the app's on-disk data store
 testthat::test_dir("tests/testthat")
 ```
 
 ## Methods, limitations and interpretation
 
-See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
+See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); survival associations are exploratory (median-split Kaplan–Meier and continuous Cox models, no optimised cut-points); co-expression is a study-adjusted Spearman correlation across tumour samples within one cell type; p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
 
 ## Licence
 

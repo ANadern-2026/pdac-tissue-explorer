@@ -9,7 +9,8 @@ suppressPackageStartupMessages({ library(DBI); library(RSQLite) })
 
 STORE_FORMAT  <- 1L      # bump when the on-disk layout changes (05_build_store.R writes the same constant)
 STORE_INFO_CODEC <- "rds-gzip"
-STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite", phospho = "phospho.sqlite")   # sc, phospho: optional
+STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite", phospho = "phospho.sqlite",
+                   clinical = "clinical.sqlite", coexp = "coexp.sqlite")      # all but cptac and bulk are optional
 STORE_CACHE_MB <- 64     # memory budget of the per-gene record cache (shared by all sessions)
 
 # ---- record codecs (encoders are in data-raw/05_build_store.R) ----
@@ -119,11 +120,20 @@ load_app_data <- function(dir = DATA_DIR) {
   }
   d$has_phospho <- file.exists(f(STORE_LAYERS[["phospho"]]))
   if (d$has_phospho) { d$phospho <- store_open(f(STORE_LAYERS[["phospho"]])); d$phospho_map <- d$phospho$info$gene_map }
+  d$has_clinical <- file.exists(f(STORE_LAYERS[["clinical"]]))
+  if (d$has_clinical) { st <- store_open(f(STORE_LAYERS[["clinical"]])); d$clin <- st$info[c("cptac", "tcga", "moffitt", "moffitt_used")]; store_close(st) }
+  d$has_coexp <- isTRUE(d$has_sc) && file.exists(f(STORE_LAYERS[["coexp"]]))
+  if (d$has_coexp) {
+    d$coexp <- store_open(f(STORE_LAYERS[["coexp"]]))
+    d$coexp_cells <- d$coexp$info$cell_types
+    d$coexp_units <- stats::setNames(lapply(d$coexp_cells$compartment, function(cc) coexp_units(d$sc_groups, cc)), d$coexp_cells$compartment)
+    d$sc_symbol <- stats::setNames(d$genes$symbol[!is.na(d$genes$sym_sc)], d$genes$sym_sc[!is.na(d$genes$sym_sc)])   # sc symbol -> index symbol
+  }
   d$choices <- stats::setNames(d$genes$symbol, ifelse(is.na(d$genes$name), d$genes$symbol, paste0(d$genes$symbol, " - ", d$genes$name)))
   d
 }
 
-close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
+close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho", "coexp")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
 
 compartment_of <- function(cell_type, fine_group) {
   key <- ifelse(cell_type == "DUCTAL", ifelse(fine_group %in% names(DUCTAL_GROUP), "TUMOUR_DUCTAL", "OTHER_DUCTAL"), cell_type)
@@ -152,7 +162,9 @@ add_xrefs <- function(genes, x) {
   genes
 }
 
-gene_row <- function(d, symbol) d$genes[match(symbol, d$genes$symbol), , drop = FALSE]
+# symbol is forced first: a Shiny req() inside the argument must stop the reactive quietly, which fails when another
+# package has turned match() into an S4 generic (the error is then re-raised as "error in evaluating the argument 'x'")
+gene_row <- function(d, symbol) { force(symbol); d$genes[match(symbol, d$genes$symbol), , drop = FALSE] }
 
 # CPTAC paired values for one gene and assay ("protein" | "rna")
 cptac_pairs <- function(d, symbol, assay = c("protein", "rna")) {
@@ -171,7 +183,7 @@ cptac_pairs <- function(d, symbol, assay = c("protein", "rna")) {
 # CPTAC phosphosites of one gene: sites x samples matrices (log2) for tumours and adjacent normals, the gene's protein
 # level aligned to the same samples (for values relative to protein), and one annotation row per site; NULL if none
 phospho_sites <- function(d, symbol) {
-  if (!isTRUE(d$has_phospho)) return(NULL)
+  force(symbol); if (!isTRUE(d$has_phospho)) return(NULL)
   ps <- d$phospho_map$sym_cptac_phospho[d$phospho_map$symbol %in% symbol]
   recs <- lapply(ps, function(s) store_get(d$phospho, "site", s)); have <- !vapply(recs, is.null, logical(1))
   ps <- ps[have]; recs <- recs[have]
@@ -233,4 +245,56 @@ sc_aggregate <- function(v, by) {
   a <- stats::aggregate(cbind(n_cells, w_mean, w_frac) ~ ., data = v[, c(by, "n_cells", "w_mean", "w_frac")], FUN = sum)
   a$mean_cp10k <- a$w_mean / a$n_cells; a$frac <- a$w_frac / a$n_cells; a$avg_expr <- log1p(a$mean_cp10k)
   a[, c(by, "n_cells", "mean_cp10k", "avg_expr", "frac")]
+}
+
+# ---- clinical context (clinical.sqlite, data-raw/03b) ----
+# Tumour values of one gene with each tumour's clinical data, one row per tumour and dataset:
+# dataset = "CPTAC protein" | "CPTAC RNA" | "TCGA-PAAD RNA"; value = log2 scale of that dataset; NULL if no clinical layer
+CLIN_DATASETS <- c("TCGA-PAAD RNA", "CPTAC protein", "CPTAC RNA")
+clinical_values <- function(d, symbol) {
+  if (!isTRUE(d$has_clinical)) return(NULL)
+  gr <- gene_row(d, symbol); out <- list(); cols <- d$cptac$info$colnames
+  for (a in c("protein", "rna")) {
+    s <- gr[[paste0("sym_cptac_", a)]]; rec <- if (is.na(s)) NULL else store_get(d$cptac, a, s)
+    if (is.null(rec)) next
+    v <- stats::setNames(rec$tumor, cols[[paste0(a, "_tumor")]]); cl <- d$clin$cptac
+    out[[a]] <- data.frame(dataset = if (a == "protein") "CPTAC protein" else "CPTAC RNA", patient = cl$case_id, value = unname(v[cl$case_id]),
+                           cl[, c("age", "sex", "stage", "os_time", "os_event")], pfi_time = NA_real_, pfi_event = NA_integer_, moffitt = cl$moffitt,
+                           stringsAsFactors = FALSE, row.names = NULL)
+  }
+  b <- bulk_values(d, symbol)
+  if (!is.null(b)) {
+    cl <- d$clin$tcga
+    out$tcga <- data.frame(dataset = "TCGA-PAAD RNA", patient = cl$patient, value = unname(b$value[match(cl$sample, b$sample)]),
+                           cl[, c("age", "sex", "stage", "os_time", "os_event", "pfi_time", "pfi_event", "moffitt")], stringsAsFactors = FALSE, row.names = NULL)
+  }
+  if (!length(out)) return(NULL)
+  x <- do.call(rbind, unname(out)); x <- x[is.finite(x$value), ]; rownames(x) <- NULL
+  x$dataset <- factor(x$dataset, levels = CLIN_DATASETS); x[order(x$dataset), ]
+}
+
+# ---- co-expression partners (coexp.sqlite, data-raw/01b) ----
+# stored partners of one gene: compartment, partner (single-cell and index symbol), rho, FDR; NULL if not analysed anywhere
+coexp_partners <- function(d, symbol) {
+  if (!isTRUE(d$has_coexp)) return(NULL)
+  s <- gene_row(d, symbol)$sym_sc; if (is.na(s)) return(NULL)
+  rec <- store_get(d$coexp, "partners", s); if (is.null(rec)) return(NULL)
+  ps <- d$coexp$info$genes[rec$partner]
+  data.frame(compartment = factor(d$coexp$info$compartments[rec$compartment], levels = CELLTYPE_ORDER), partner_sc = ps,
+             partner = unname(ifelse(is.na(d$sc_symbol[ps]), ps, d$sc_symbol[ps])), r = rec$r_x1000 / 1000, q = 10^(-rec$q_mlog10_x100 / 100),
+             stringsAsFactors = FALSE)
+}
+
+# per-sample values of two genes in one cell type, as used for the co-expression statistic (raw and centred within study)
+coexp_pair_values <- function(d, symbol, partner, compartment) {
+  u <- d$coexp_units[[compartment]]; a <- sc_values(d, symbol); b <- sc_values(d, partner)
+  if (is.null(u) || is.null(a) || is.null(b)) return(NULL)
+  x <- log1p(c(coexp_mean(a$mean_cp10k, u))); y <- log1p(c(coexp_mean(b$mean_cp10k, u)))
+  cen <- function(v) v - stats::ave(v, u$study)
+  st <- coexp_pair(a$mean_cp10k, b$mean_cp10k, u)
+  out <- data.frame(sample = u$samples, study = u$study, study_label = unname(STUDY_CITATION[u$study]), n_cells = u$n_cells, x = x, y = y, xc = cen(x), yc = cen(y),
+                    stringsAsFactors = FALSE)
+  attr(out, "r") <- st$r; attr(out, "p") <- st$p
+  attr(out, "r_raw") <- if (stats::sd(x) > 0 && stats::sd(y) > 0) stats::cor(x, y, method = "spearman") else NA_real_
+  out
 }

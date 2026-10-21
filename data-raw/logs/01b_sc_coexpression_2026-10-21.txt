@@ -1,0 +1,57 @@
+01b_sc_coexpression started 2026-10-21 05:28:52 UTC
+source sc_groups.rds MD5 38d9fc2793eb35d12ae125f04e586b9c 
+source sc_expr.rds MD5 8dfaba06afcdf84e0a3da5e3e3a82d6e 
+settings: state = Primary tumour; min cells per sample = 20; min samples per study = 3; min samples = 20; min median fraction expressing = 0.02; partners kept = 50 + 20 
+Fibroblasts: 91 samples from 8 studies, 10185 genes analysed; 298372 stored positive pairs at FDR < 5%; 113 s 
+Pericytes: 76 samples from 8 studies, 9700 genes analysed; 114891 stored positive pairs at FDR < 5%; 86 s 
+Endothelial cells: 72 samples from 7 studies, 9999 genes analysed; 156218 stored positive pairs at FDR < 5%; 96 s 
+Ductal: tumour subclusters: 108 samples from 10 studies, 10515 genes analysed; 443420 stored positive pairs at FDR < 5%; 107 s 
+Ductal: other: 75 samples from 7 studies, 10896 genes analysed; 338305 stored positive pairs at FDR < 5%; 93 s 
+Acinar cells: 65 samples from 6 studies, 10389 genes analysed; 466874 stored positive pairs at FDR < 5%; 108 s 
+Endocrine cells: 37 samples from 4 studies, 9995 genes analysed; 112209 stored positive pairs at FDR < 5%; 89 s 
+Myeloid cells: 85 samples from 9 studies, 8590 genes analysed; 363909 stored positive pairs at FDR < 5%; 78 s 
+Mast cells: 23 samples from 4 studies, 6927 genes analysed; 28991 stored positive pairs at FDR < 5%; 53 s 
+T and NK cells: 86 samples from 8 studies, 7054 genes analysed; 266246 stored positive pairs at FDR < 5%; 57 s 
+B cells: 38 samples from 5 studies, 6941 genes analysed; 42744 stored positive pairs at FDR < 5%; 54 s 
+Plasma cells: 27 samples from 4 studies, 7403 genes analysed; 198252 stored positive pairs at FDR < 5%; 63 s 
+pairs stored: 7601580 | wrote app/data/sc_coexp.rds (26 MB) 
+finished 2026-10-21 05:47:34 UTC
+
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26200)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] DT_0.34.0            plotly_4.12.1        bslib_0.12.0         shiny_1.14.0         SeuratObject_5.4.0   sp_2.2-3             ggplot2_4.0.3       
+ [8] testthat_3.3.2       RSQLite_2.4.6        DBI_1.3.0            Matrix_1.7-5         org.Hs.eg.db_3.20.0  AnnotationDbi_1.68.0 IRanges_2.40.1      
+[15] S4Vectors_0.44.0     Biobase_2.66.0       BiocGenerics_0.52.0 
+
+loaded via a namespace (and not attached):
+ [1] readxl_1.5.0.1          rlang_1.3.0             magrittr_2.0.5          otel_0.2.0              compiler_4.4.1          png_0.1-9              
+ [7] vctrs_0.7.3             pkgconfig_2.0.3         crayon_1.5.3            fastmap_1.2.0           XVector_0.46.0          fontawesome_0.5.3      
+[13] labeling_0.4.3          promises_1.5.0          markdown_2.0            UCSC.utils_1.2.0        purrr_1.2.2             bit_4.6.0              
+[19] waldo_0.6.2             xfun_0.61               zlibbioc_1.52.0         cachem_1.1.0            litedown_0.11           GenomeInfoDb_1.42.3    
+[25] jsonlite_2.0.0          blob_1.3.0              later_1.4.8             parallel_4.4.1          R6_2.6.1                RColorBrewer_1.1-3     
+[31] parallelly_1.48.0       pkgload_1.5.3           cellranger_1.1.0        brio_1.1.5              jquerylib_0.1.4         Rcpp_1.1.2             
+[37] future.apply_1.20.2     httpuv_1.6.17           tidyselect_1.2.1        rstudioapi_0.19.0       dichromat_2.0-1         yaml_2.3.12            
+[43] codetools_0.2-20        listenv_1.1.0           lattice_0.22-9          tibble_3.3.1            withr_3.0.3             KEGGREST_1.46.0        
+[49] S7_0.2.2                future_1.80.0           desc_1.4.3              Biostrings_2.74.1       pillar_1.11.1           rsconnect_1.11.2       
+[55] generics_0.1.4          rprojroot_2.1.1         commonmark_2.0.0        scales_1.4.0            globals_0.20.0          xtable_1.8-8           
+[61] glue_1.8.1              tools_4.4.1             data.table_1.18.6.1     fs_2.1.0                dotCall64_1.2           grid_4.4.1             
+[67] tidyr_1.3.2             crosstalk_1.2.2         GenomeInfoDbData_1.2.13 cli_3.6.6               spam_2.11-4             viridisLite_0.4.3      
+[73] dplyr_1.2.1             gtable_0.3.6            sass_0.4.10             digest_0.6.39           progressr_1.0.0         htmlwidgets_1.6.4      
+[79] farver_2.1.2            memoise_2.0.1           htmltools_0.5.9         lifecycle_1.0.5         httr_1.4.9              mime_0.13              
+[85] bit64_4.8.6            
