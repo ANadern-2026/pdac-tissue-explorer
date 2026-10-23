@@ -5,7 +5,7 @@
 # rocker/shiny pins CRAN to a dated Posit Package Manager snapshot, so package versions are reproducible.
 FROM rocker/shiny:4.4.1
 
-RUN install2.r --error --skipinstalled shiny bslib ggplot2 plotly DT Matrix markdown patchwork scales DBI RSQLite survival \
+RUN install2.r --error --skipinstalled shiny bslib ggplot2 plotly DT Matrix markdown patchwork scales DBI RSQLite survival maxstat \
     && rm -rf /tmp/downloaded_packages
 
 WORKDIR /srv/pdac-tissue-explorer

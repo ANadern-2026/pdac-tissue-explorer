@@ -84,3 +84,53 @@ test_that("co-expression: units, study adjustment and precomputed partners agree
   expect_false(any(tp$pairs$gene == tp$pairs$partner))
   expect_equal(tp$pairs$q[tp$pairs$gene == 1 & tp$pairs$partner == 2], signif(p.adjust(coexp_p(c(p12$r, p13$r), tp$df), "BH")[1], 3))
 })
+
+test_that("data-driven cut-off: maxstat estimate, corrected p-value and transfer to another cohort", {
+  suppressPackageStartupMessages(library(maxstat))
+  m <- cut_maxstat(sx); ref <- maxstat.test(Surv(time, event) ~ value, sx, smethod = "LogRank", pmethod = "Lau92", minprop = 0.2, maxprop = 0.8)
+  expect_equal(m$cut, unname(ref$estimate)); expect_equal(m$p, min(1, unname(ref$p.value)))
+  expect_true(m$q >= 0.19 && m$q <= 0.81)
+  k <- km_split(sx, m$cut); expect_equal(unname(k$n[["High"]]), sum(sx$value > m$cut)); expect_equal(k$q, mean(sx$value <= m$cut))
+  # the corrected p is larger than the naive log-rank p at the chosen cut-off
+  expect_gt(m$p, k$p)
+  other <- transform(sx, value = value + 5)
+  tr <- transfer_split(other, m$q); expect_equal(tr$cut, unname(quantile(other$value, m$q))); expect_equal(tr$q, m$q)
+  expect_null(cut_maxstat(transform(sx, event = 0L)))
+})
+
+test_that("Kaplan-Meier for several groups and the spline hazard curve", {
+  g <- factor(cut(sx$value, quantile(sx$value, c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = c("a", "b", "c")))
+  k <- km_groups(sx, g)
+  expect_equal(k$p, pchisq(survdiff(Surv(time, event) ~ g, sx)$chisq, 2, lower.tail = FALSE)); expect_identical(k$levels, c("a", "b", "c"))
+  expect_null(km_groups(sx, factor(c(rep("a", n - 5), rep("b", 5)))))      # a group below SURV_MIN_GROUP
+  sp <- surv_spline(sx)
+  fit <- coxph(Surv(time, event) ~ splines::ns(value, df = 3), sx)
+  expect_equal(sp$p_any, pchisq(2 * diff(fit$loglik), 3, lower.tail = FALSE))
+  i <- which.min(abs(sp$curve$value - median(sx$value))); expect_lt(abs(log(sp$curve$hr[i])), 0.05)   # HR ~1 at the median
+  expect_true(all(sp$curve$lo <= sp$curve$hr & sp$curve$hr <= sp$curve$hi))
+})
+
+test_that("gene sets: calls, counts, merged groups, filters and the Cox trend", {
+  set.seed(3)
+  M <- cbind(A = rnorm(60), B = rnorm(60), C = rnorm(60))
+  cl <- geneset_calls(M, c("high", "low", "high"))
+  expect_identical(unname(cl$calls[, "A"]), unname(M[, "A"] > median(M[, "A"]))); expect_identical(unname(cl$calls[, "B"]), unname(M[, "B"] <= median(M[, "B"])))
+  expect_equal(unname(cl$count), unname(rowSums(cl$calls)))
+  expect_equal(unname(cl$score), unname(drop(scale(M) %*% c(1, -1, 1)) / 3))
+  ct <- geneset_calls(M, c("high", "low", "high"), "tertile")
+  expect_equal(sum(ct$calls[, "A"]), sum(M[, "A"] > quantile(M[, "A"], 2 / 3)))
+  gr <- geneset_groups(c(rep(0L, 3), rep(1L, 20), rep(2L, 25), rep(3L, 4)), 3)
+  expect_identical(levels(gr), c("0-1 of 3", "2-3 of 3")); expect_equal(as.integer(table(gr)), c(23L, 29L))
+  expect_identical(levels(geneset_groups(c(rep(0L, 12), rep(1L, 12), rep(2L, 12)), 2)), c("0 of 2", "1 of 2", "2 of 2"))
+  gv <- list(M = M, clin = data.frame(patient = paste0("p", 1:60), age = round(runif(60, 40, 80)), sex = rep(c("Female", "Male"), 30),
+                                      stage = rep(c("I", "II", "III"), 20), residual = NA_character_, os_time = rexp(60, 1 / 600), os_event = rbinom(60, 1, 0.7),
+                                      pfi_time = NA, pfi_event = NA))
+  x <- geneset_frame(gv, c("high", "low", "high"), "os")
+  expect_equal(nrow(x), 60); expect_equal(x$value_count, unname(cl$count)); expect_equal(x$time, gv$clin$os_time / DAYS_PER_MONTH)
+  xf <- geneset_frame(gv, c("high", "low", "high"), "os", filters = list(stage = "III", sex = c("Female", "Male")))
+  expect_true(all(xf$stage == "III")); expect_equal(xf$value_count, unname(cl$count[gv$clin$stage == "III"]))   # calls made before filtering
+  h <- geneset_cox(x, "graded"); fit <- coxph(Surv(time, event) ~ value_count, x)
+  expect_equal(h$hr, unname(exp(coef(fit))))
+  hs <- geneset_cox(x, "score"); expect_equal(hs$hr, unname(exp(coef(coxph(Surv(time, event) ~ scale(score)[, 1], x)))))
+  expect_null(geneset_frame(list(missing = "X"), "high", "os"))
+})

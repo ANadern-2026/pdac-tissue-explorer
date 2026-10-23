@@ -121,24 +121,27 @@ surv_data <- function(cv, dataset, endpoint) {
              age = x$age, stage = x$stage, stringsAsFactors = FALSE)[!is.na(x[[paste0(endpoint, "_time")]]) & !is.na(x[[paste0(endpoint, "_event")]]), ]
 }
 stage3 <- function(s) factor(ifelse(s %in% c("III", "IV"), "III-IV", s), levels = c("I", "II", "III-IV"))
-cox_hr <- function(x, adjusted = FALSE) {
+cox_hr <- function(x, adjusted = FALSE, scale = TRUE) {      # scale = FALSE: HR per unit of value (gene-set counts, 0/1 groups)
   na <- list(hr = NA_real_, lo = NA_real_, hi = NA_real_, p = NA_real_, n = nrow(x), events = sum(x$event))
   if (adjusted) { x <- x[!is.na(x$age) & !is.na(x$stage), ]; x$stage <- droplevels(stage3(x$stage)); na$n <- nrow(x); na$events <- sum(x$event) }
   if (sum(x$event) < SURV_MIN_EVENTS || !isTRUE(stats::sd(x$value) > 0)) return(na)
-  x$z <- (x$value - mean(x$value)) / stats::sd(x$value)
+  x$z <- if (scale) (x$value - mean(x$value)) / stats::sd(x$value) else x$value
   f <- if (adjusted && nlevels(x$stage) > 1) survival::Surv(time, event) ~ z + age + stage else if (adjusted) survival::Surv(time, event) ~ z + age else survival::Surv(time, event) ~ z
   fit <- tryCatch(suppressWarnings(survival::coxph(f, data = x)), error = function(e) NULL)
   if (is.null(fit) || !is.finite(stats::coef(fit)[["z"]])) return(na)
   b <- stats::coef(fit)[["z"]]; se <- sqrt(stats::vcov(fit)["z", "z"])
   list(hr = exp(b), lo = exp(b - 1.96 * se), hi = exp(b + 1.96 * se), p = 2 * stats::pnorm(-abs(b / se)), n = nrow(x), events = sum(x$event))
 }
-# median split: "high" = above the median, "low" = at or below; NULL if a group is too small (many identical values)
-km_split <- function(x) {
-  g <- factor(ifelse(x$value > stats::median(x$value), "High", "Low"), levels = c("High", "Low"))
-  if (min(table(g)) < SURV_MIN_GROUP || sum(x$event) < SURV_MIN_EVENTS) return(NULL)
-  fit <- survival::survfit(survival::Surv(time, event) ~ g, data = data.frame(x, g = g))
-  lr <- survival::survdiff(survival::Surv(time, event) ~ g, data = data.frame(x, g = g))
-  p <- stats::pchisq(lr$chisq, df = 1, lower.tail = FALSE)
+# Kaplan-Meier curves and a log-rank test for any grouping g (factor; levels in display order). NULL if a group has fewer than
+# SURV_MIN_GROUP patients or there are fewer than SURV_MIN_EVENTS events. For ordered groups (gene-set counts) also a log-rank
+# test for trend is not used; the Cox trend model in geneset_cox() is reported instead.
+km_groups <- function(x, g) {
+  g <- droplevels(g)
+  if (nlevels(g) < 2 || min(table(g)) < SURV_MIN_GROUP || sum(x$event) < SURV_MIN_EVENTS) return(NULL)
+  dd <- data.frame(x, g = g)
+  fit <- survival::survfit(survival::Surv(time, event) ~ g, data = dd)
+  lr <- survival::survdiff(survival::Surv(time, event) ~ g, data = dd)
+  p <- stats::pchisq(lr$chisq, df = nlevels(g) - 1L, lower.tail = FALSE)
   med <- summary(fit)$table[, "median"]; names(med) <- sub("^g=", "", names(med))
   steps <- do.call(rbind, lapply(levels(g), function(k) {
     s <- fit[paste0("g=", k)]
@@ -146,8 +149,48 @@ km_split <- function(x) {
   }))
   ticks <- seq(0, max(x$time), by = 12)
   at_risk <- do.call(rbind, lapply(levels(g), function(k) data.frame(group = k, time = ticks, n = vapply(ticks, function(t) sum(x$time[g == k] >= t), integer(1)))))
-  list(steps = steps, at_risk = at_risk, p = p, median = med, n = c(table(g)), events = c(tapply(x$event, g, sum)), cut = stats::median(x$value), group = g)
+  list(steps = steps, at_risk = at_risk, p = p, median = med, n = c(table(g)), events = c(tapply(x$event, g, sum)), group = g, levels = levels(g))
 }
+# two groups split at `cut` (default: the median): "High" = above the cut, "Low" = at or below; NULL if a group is too small
+km_split <- function(x, cut = stats::median(x$value)) {
+  g <- factor(ifelse(x$value > cut, "High", "Low"), levels = c("High", "Low"))
+  k <- km_groups(x, g); if (is.null(k)) return(NULL)
+  k$cut <- cut; k$q <- mean(x$value <= cut); k
+}
+
+# ---- thresholds (S3b) -------------------------------------------------------------------------------------------
+# Data-driven cut-off: the split that maximises the log-rank statistic among cut-offs leaving >= 20% of patients on each side
+# (maximally selected rank statistics; Hothorn & Lausen 2003, R package maxstat). Its p-value is corrected for the search
+# (Lausen & Schumacher 1992 approximation); the plain log-rank p-value at the chosen cut-off is too small and is not reported.
+CUT_MINPROP <- 0.2
+cut_maxstat <- function(x, minprop = CUT_MINPROP) {
+  if (is.null(x) || sum(x$event) < SURV_MIN_EVENTS || length(unique(x$value)) < 10) return(NULL)
+  m <- tryCatch(suppressWarnings(maxstat::maxstat.test(survival::Surv(time, event) ~ value, data = x, smethod = "LogRank", pmethod = "Lau92",
+                                                       minprop = minprop, maxprop = 1 - minprop)), error = function(e) NULL)
+  if (is.null(m) || !is.finite(m$estimate)) return(NULL)
+  list(cut = unname(m$estimate), q = mean(x$value <= m$estimate), p = min(1, unname(m$p.value)), statistic = unname(m$statistic))   # the approximation can exceed 1
+}
+# Smooth hazard curve: Cox model with a natural cubic spline (3 df) of the value; hazard ratio relative to the median across the
+# 5th-95th percentile with pointwise 95% CI; likelihood-ratio p-values for any association and for departure from a straight line
+surv_spline <- function(x, df = 3L) {
+  if (is.null(x) || sum(x$event) < SURV_MIN_EVENTS || length(unique(x$value)) < 10) return(NULL)
+  basis <- splines::ns(x$value, df = df)
+  fit <- tryCatch(suppressWarnings(survival::coxph(survival::Surv(time, event) ~ basis, data = x)), error = function(e) NULL)
+  lin <- tryCatch(suppressWarnings(survival::coxph(survival::Surv(time, event) ~ value, data = x)), error = function(e) NULL)
+  if (is.null(fit) || is.null(lin) || any(!is.finite(stats::coef(fit)))) return(NULL)
+  grid <- seq(stats::quantile(x$value, 0.05), stats::quantile(x$value, 0.95), length.out = 80)
+  B <- stats::predict(basis, grid) - matrix(stats::predict(basis, stats::median(x$value)), length(grid), df, byrow = TRUE)
+  lp <- drop(B %*% stats::coef(fit)); se <- sqrt(pmax(rowSums((B %*% stats::vcov(fit)) * B), 0))
+  list(curve = data.frame(value = grid, hr = exp(lp), lo = exp(lp - 1.96 * se), hi = exp(lp + 1.96 * se)),
+       p_any = stats::pchisq(2 * diff(fit$loglik), df, lower.tail = FALSE),
+       p_nonlinear = stats::pchisq(2 * (fit$loglik[2] - lin$loglik[2]), df - 1L, lower.tail = FALSE),
+       values = x$value, median = stats::median(x$value), n = nrow(x), events = sum(x$event))
+}
+# the independent cohort used to check a split: TCGA -> CPTAC (same molecule: RNA), CPTAC -> TCGA; always overall survival
+other_cohort <- function(dataset) if (identical(dataset, "TCGA-PAAD RNA")) "CPTAC RNA" else "TCGA-PAAD RNA"
+# apply a split found in one cohort to another as the same percentile (q = share of patients at or below the cut-off)
+transfer_split <- function(x, q) { if (is.null(x) || !nrow(x)) return(NULL); k <- km_split(x, cut = unname(stats::quantile(x$value, q))); if (!is.null(k)) k$q <- q; k }
+
 surv_table <- function(cv) {      # all dataset x endpoint combinations: unadjusted and adjusted HR per SD
   s <- surv_setups(cv); if (is.null(s) || !nrow(s)) return(NULL)
   do.call(rbind, lapply(seq_len(nrow(s)), function(i) {
@@ -198,4 +241,54 @@ coexp_top_pairs <- function(mean_x100, frac_x10000, u, min_frac = COEXP_MIN_FRAC
     }
   }
   list(pairs = if (m) do.call(rbind, out) else NULL, n_genes = m, df = df)
+}
+
+# ---- gene sets (page "Gene sets") ---------------------------------------------------------------------------------
+# Each gene is called "in the chosen direction" relative to the other tumours of the same dataset (all patients with values
+# for every gene, before any clinical filter): high = above the median (or in the top third), low = at or below the median
+# (or in the bottom third). Count = number of genes in their chosen direction. Score = mean z-score with the sign of the
+# chosen direction (higher = more of the pattern).
+GS_MAX_GENES <- 6L
+geneset_calls <- function(M, dirs, cut = c("median", "tertile")) {
+  cut <- match.arg(cut)
+  calls <- vapply(seq_len(ncol(M)), function(j) {
+    v <- M[, j]
+    if (dirs[j] == "high") { if (cut == "median") v > stats::median(v) else v > stats::quantile(v, 2 / 3) }
+    else { if (cut == "median") v <= stats::median(v) else v <= stats::quantile(v, 1 / 3) }
+  }, logical(nrow(M)))
+  calls <- matrix(calls, nrow(M), dimnames = dimnames(M))
+  Z <- scale(M); Z[, apply(M, 2, stats::sd) == 0] <- 0
+  sgn <- ifelse(dirs == "high", 1, -1)
+  list(calls = calls, count = rowSums(calls), score = drop(Z %*% sgn) / ncol(M))
+}
+# ordered groups of the count; neighbouring counts are merged (from the low end) until every group has >= min_n patients
+geneset_groups <- function(count, k, min_n = SURV_MIN_GROUP) {
+  n <- tabulate(count + 1L, k + 1L); bins <- list(); cur <- integer(0)
+  for (c in 0:k) { cur <- c(cur, c); if (sum(n[cur + 1L]) >= min_n) { bins[[length(bins) + 1L]] <- cur; cur <- integer(0) } }
+  if (length(cur)) { if (length(bins)) bins[[length(bins)]] <- c(bins[[length(bins)]], cur) else bins[[1L]] <- cur }
+  lab <- vapply(bins, function(b) { r <- range(b); paste0(if (r[1] == r[2]) r[1] else paste0(r[1], "-", r[2]), " of ", k) }, "")
+  map <- rep(lab, lengths(bins))[match(count, unlist(bins))]
+  factor(map, levels = lab)
+}
+# one dataset x endpoint: per-patient frame with the clinical filters applied; NULL with a reason if not possible
+geneset_frame <- function(gv, dirs, endpoint, cut = "median", filters = list()) {
+  if (is.null(gv) || !is.null(gv$missing)) return(NULL)
+  cl <- geneset_calls(gv$M, dirs, cut)
+  x <- data.frame(gv$clin, value_count = cl$count, all = as.integer(cl$count == ncol(gv$M)), score = cl$score, stringsAsFactors = FALSE)
+  x <- cbind(x, gv$M, stats::setNames(as.data.frame(cl$calls), paste0("in_direction_", colnames(gv$M))))
+  x$time <- x[[paste0(endpoint, "_time")]] / DAYS_PER_MONTH; x$event <- x[[paste0(endpoint, "_event")]]
+  x <- x[!is.na(x$time) & !is.na(x$event), ]
+  keep <- rep(TRUE, nrow(x))
+  if (length(filters$stage) && !setequal(filters$stage, c("I", "II", "III", "IV"))) keep <- keep & x$stage %in% filters$stage
+  if (length(filters$sex) == 1L) keep <- keep & x$sex %in% filters$sex
+  if (length(filters$age) == 2L && (filters$age[1] > 0 || filters$age[2] < 120)) keep <- keep & !is.na(x$age) & x$age >= filters$age[1] & x$age <= filters$age[2]
+  if (length(filters$margin) && !setequal(filters$margin, c("R0", "R1", "R2", "RX")) && any(!is.na(x$residual)))
+    keep <- keep & x$residual %in% filters$margin
+  x[keep, , drop = FALSE]
+}
+# effect for one frame: graded = HR per additional gene; all = HR all vs fewer; score = HR per SD of the score
+geneset_cox <- function(x, mode, adjusted = FALSE) {
+  if (is.null(x) || !nrow(x)) return(list(hr = NA_real_, lo = NA_real_, hi = NA_real_, p = NA_real_, n = 0L, events = 0L))
+  x$value <- switch(mode, graded = x$value_count, all = x$all, score = x$score)
+  cox_hr(x, adjusted, scale = mode == "score")
 }

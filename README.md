@@ -10,6 +10,7 @@ An interactive web app for exploring where any human gene is expressed in pancre
 
 - **Explore a gene.** A plain-language summary, then sample-level views: paired tumour vs adjacent-normal protein, RNA and phosphosites (CPTAC; phosphosites also relative to the protein level), PDAC vs healthy pancreas (TCGA/GTEx), expression by cell type with transcript shares, expression across tissue states per cell type, fibroblast and tumour-cell subtypes, the gene on the atlas map, its clinical context (survival, stage and the classical/basal-like tumour subtype in TCGA-PAAD and CPTAC) and the genes it is co-expressed with within each cell type across tumours. Search by symbol, alias or full name; links to the gene's pages at NCBI Gene, UniProt, the Human Protein Atlas, Open Targets and DepMap.
 - **Compare genes.** Up to 40 genes at once as a cell-type dot heatmap and a tumour-vs-normal forest plot.
+- **Gene sets & survival.** Survival of patients grouped by up to six genes, each high or low as chosen: by the number of genes in the chosen direction, all vs fewer, or a combined score; filters for stage, sex, age and resection margin; the same definition checked in the other cohort.
 - **Download.** Every figure as PDF/PNG and the underlying per-sample values as CSV.
 
 ## Data sources
@@ -52,7 +53,7 @@ deploy/server/                  self-hosting on a server: Docker Compose + Caddy
 
 ## Run it locally
 
-Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `survival`, `markdown`, `patchwork`, `scales`.
+Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `survival`, `maxstat`, `markdown`, `patchwork`, `scales`.
 
 ```r
 source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/ and builds the data store
@@ -80,7 +81,7 @@ testthat::test_dir("tests/testthat")
 
 ## Methods, limitations and interpretation
 
-See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); survival associations are exploratory (median-split Kaplan–Meier and continuous Cox models, no optimised cut-points); co-expression is a study-adjusted Spearman correlation across tumour samples within one cell type; p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
+See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); survival associations are exploratory (Kaplan–Meier at the median or at a data-driven cut-off with a p-value corrected for the search and checked in the other cohort, spline and continuous Cox models); co-expression is a study-adjusted Spearman correlation across tumour samples within one cell type; p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
 
 ## Licence
 

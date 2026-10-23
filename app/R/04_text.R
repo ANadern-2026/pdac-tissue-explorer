@@ -156,3 +156,13 @@ txt_coexp <- function(px, symbol, compartment, info) {
   paste0(head, "most correlated across tumours are ", paste0(x$partner, " (rho = ", fmt_num(x$r), ")", collapse = ", "),
          ". Co-expression across patients suggests shared regulation or a shared cell state, not a physical or functional interaction.")
 }
+
+txt_geneset <- function(x, h, ha, genes, dirs, dataset, endpoint, mode, n_all) {
+  if (is.null(x) || !nrow(x)) return(paste0(dataset, ": no patients with values for all of ", paste(genes, collapse = ", "), " after the filters."))
+  unit <- switch(mode, graded = "each additional gene in its chosen direction", all = "all genes in their chosen direction (vs fewer)", score = "each standard deviation of the combined score")
+  eff <- function(h) if (is.na(h$hr)) "not estimable (too few events or no variation)" else
+    paste0("hazard ratio ", fmt_num(h$hr), " (95% CI ", fmt_num(h$lo), "-", fmt_num(h$hi), ", p = ", fmt_p(h$p), ")")
+  paste0(dataset, ", ", tolower(SURV_ENDPOINTS[[endpoint]]), ": ", nrow(x), " patients (", sum(x$event), " events)",
+         if (nrow(x) < n_all) paste0(" of ", n_all, " with values for all genes") else "", ". For ", unit, ": ", eff(h),
+         "; adjusted for age and stage: ", eff(ha), ". Hazard ratio > 1 = shorter survival. Exploratory; see the notes below.")
+}

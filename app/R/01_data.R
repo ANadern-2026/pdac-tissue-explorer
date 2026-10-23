@@ -298,3 +298,20 @@ coexp_pair_values <- function(d, symbol, partner, compartment) {
   attr(out, "r_raw") <- if (stats::sd(x) > 0 && stats::sd(y) > 0) stats::cor(x, y, method = "spearman") else NA_real_
   out
 }
+
+# ---- gene sets: values of several genes for the tumours of one dataset (patients with values for every gene) ----
+geneset_values <- function(d, genes, dataset) {
+  if (!isTRUE(d$has_clinical) || !length(genes)) return(NULL)
+  vals <- lapply(genes, function(g) { cv <- clinical_values(d, g); if (is.null(cv)) return(NULL); cv <- cv[cv$dataset == dataset, ]
+    if (!nrow(cv)) NULL else stats::setNames(cv$value, cv$patient) })
+  miss <- genes[vapply(vals, is.null, logical(1))]
+  if (length(miss)) return(list(missing = miss))
+  pts <- Reduce(intersect, lapply(vals, names))
+  M <- matrix(vapply(vals, function(v) unname(v[pts]), numeric(length(pts))), length(pts), dimnames = list(pts, genes))
+  if (dataset == "TCGA-PAAD RNA") { cl <- d$clin$tcga; id <- cl$patient; cl$residual <- NA_character_ }
+  else { cl <- d$clin$cptac; id <- cl$case_id; cl$residual <- cl$residual_tumor; cl$pfi_time <- NA_real_; cl$pfi_event <- NA_integer_ }
+  cl <- cl[match(pts, id), ]
+  list(M = M, clin = data.frame(patient = pts, age = cl$age, sex = cl$sex, stage = cl$stage, residual = cl$residual,
+                                os_time = cl$os_time, os_event = cl$os_event, pfi_time = cl$pfi_time, pfi_event = cl$pfi_event, stringsAsFactors = FALSE),
+       n_dataset = if (dataset == "TCGA-PAAD RNA") nrow(d$clin$tcga) else nrow(d$clin$cptac))
+}

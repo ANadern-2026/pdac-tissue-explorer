@@ -5,7 +5,7 @@ suppressPackageStartupMessages({
   library(shiny); library(bslib); library(ggplot2); library(plotly); library(DT)
 })
 # used via pkg:: or indirectly (includeMarkdown); listed here so deployment tools detect them
-if (FALSE) { library(markdown); library(patchwork); library(scales); library(survival) }
+if (FALSE) { library(markdown); library(patchwork); library(scales); library(survival); library(maxstat); library(splines) }
 for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f, local = TRUE)
 D <- load_app_data()            # gene index + small tables in memory; per-gene values are read from the on-disk store
 onStop(function() close_app_data(D))
@@ -24,6 +24,12 @@ random_start_gene <- function() { set.seed(NULL); sample(START_POOL, 1L) }   # r
 
 SURV_CHOICES <- c("TCGA-PAAD RNA: overall survival" = "TCGA-PAAD RNA|os", "TCGA-PAAD RNA: progression-free interval" = "TCGA-PAAD RNA|pfi",
                   "CPTAC protein: overall survival" = "CPTAC protein|os", "CPTAC RNA: overall survival" = "CPTAC RNA|os")
+GS_EXAMPLES <- list(
+  "Stroma and tumour: COL1A1, LAMB3, MSLN high" = list(genes = c("COL1A1", "LAMB3", "MSLN"), dirs = c("high", "high", "high")),
+  "Basal-like: KRT17, S100A2 high, GATA6 low" = list(genes = c("KRT17", "S100A2", "GATA6"), dirs = c("high", "high", "low")))
+GS_EXAMPLES <- Filter(function(e) all(e$genes %in% D$genes$symbol), GS_EXAMPLES)
+dir_id <- function(g, ver) paste0("dir_", ver, "_", gsub("[^A-Za-z0-9]", "_", g))   # ver changes when an example is applied, so its directions win
+CUT_CHOICES <- c("The median (fixed)" = "median", "A data-driven cut-off (p corrected for the search)" = "maxstat")
 MOFFITT_GENES <- if (isTRUE(D$has_clinical)) unique(unlist(D$clin$moffitt)) else character(0)
 
 theme_app <- bs_theme(version = 5, bg = "#fcfcfb", fg = "#0b0b0b", primary = "#2a78d6", secondary = "#52514e",
@@ -60,7 +66,7 @@ fig_downloads <- function(id) div(class = "dl-row", downloadButton(paste0(id, "_
                                   downloadButton(paste0(id, "_png"), "Figure (PNG)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_csv"), "Data (CSV)", class = "btn-sm btn-outline-secondary"))
 note <- function(...) p(class = "note", ...)
-strip <- function(...) div(class = "settings-strip", div(class = "strip-label", "View settings"), div(class = "strip-controls", ...))
+strip <- function(..., label = "View settings") div(class = "settings-strip", div(class = "strip-label", label), div(class = "strip-controls", ...))
 # Data-tab tables: DataTables' own style (style = "default") - the Ubuntu r-cran-dt package used on the server lacks the
 # Bootstrap 5 styles that DT would otherwise pick for a bslib page, which left the buttons unstyled. CSV file name: Buttons >= 1.2 reads `filename`, the server's Buttons 1.0.3 reads `title`.
 dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", format(Sys.Date())); list("copy", list(extend = "csvHtml5", filename = f, title = f)) }
@@ -99,11 +105,16 @@ ui <- page_navbar(
                "'Relative to the protein level' subtracts the gene's protein level in the same sample, separating a change in phosphorylation from a change in the amount of protein. ",
                "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity.")),
         if (isTRUE(D$has_clinical)) nav_panel("Clinical context",
-          strip(radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES)),
+          strip(radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES),
+                radioButtons("surv_cut", "Split patients at", inline = TRUE, choices = CUT_CHOICES)),
           layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)), plotlyOutput("p_km", height = "500px"), plotlyOutput("p_hr", height = "500px")),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)), plotlyOutput("p_spline", height = "460px"), plotlyOutput("p_km_other", height = "460px")),
           fig_downloads("dl_surv"),
-          note("Kaplan-Meier curves compare tumours above the median with those at or below it (log-rank test). Hazard ratios come from Cox models of the continuous value ",
-               "(per standard deviation within the dataset), unadjusted and adjusted for age and stage. No cut-point was optimised. ",
+          note("Kaplan-Meier curves compare tumours above the cut-off with those at or below it. The median is fixed in advance; the data-driven cut-off is the split ",
+               "(between the 20th and 80th percentile) with the largest log-rank statistic, and its p-value is corrected for that search (maximally selected rank statistics). ",
+               "The same split is then applied, as the same percentile, to the other, independent cohort: a cut-off that only fits the first cohort by chance usually fails there. ",
+               "The hazard curve (Cox model with a spline) shows how risk changes across the whole range of values, without any cut-off. ",
+               "Hazard ratios come from Cox models of the continuous value (per standard deviation within the dataset), unadjusted and adjusted for age and stage. ",
                "TCGA-PAAD: overall survival and progression-free interval from the TCGA Pan-Cancer Clinical Data Resource (Liu et al., Cell 2018); CPTAC: overall survival from the study's follow-up."),
           hr(), layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
             div(plotlyOutput("p_stage", height = "500px"), fig_downloads("dl_stage")),
@@ -156,6 +167,42 @@ ui <- page_navbar(
         actionButton("go_multi", "Compare", class = "btn-primary w-100"), uiOutput("multi_msg")),
       card(card_header("Cell types"), plotlyOutput("p_mdot", height = "auto"), fig_downloads("dl_mdot")),
       card(card_header("Tumour vs normal"), plotlyOutput("p_mforest", height = "auto"), fig_downloads("dl_mforest")))),
+  if (isTRUE(D$has_clinical)) nav_panel("Gene sets & survival", value = "sets",
+    div(class = "gene-band set-band",
+      div(class = "gene-search",
+        selectizeInput("set_genes", "Genes (up to 6)", choices = NULL, multiple = TRUE, width = "100%",
+                       options = list(maxItems = GS_MAX_GENES, placeholder = "Type gene symbols, e.g. COL1A1", plugins = list("remove_button"))),
+        div(class = "examples", span("Examples: "), lapply(seq_along(GS_EXAMPLES), function(i) actionLink(paste0("gsx_", i), names(GS_EXAMPLES)[i])))),
+      div(class = "set-dirs", div(class = "control-label", "Direction that defines the pattern"), uiOutput("set_dirs_ui"))),
+    div(class = "settings-strip set-settings",
+      div(class = "set-col",
+        div(class = "set-col-title", "1  Survival data"),
+        radioButtons("set_surv", NULL, choices = SURV_CHOICES)),
+      div(class = "set-col",
+        div(class = "set-col-title", "2  Group patients by"),
+        radioButtons("set_mode", NULL, choices = c("Number of genes in the chosen direction" = "graded", "All genes vs fewer" = "all", "Combined score" = "score")),
+        conditionalPanel("input.set_mode != 'score'", radioButtons("set_cut", "A gene counts as high / low when it is",
+                         choices = c("above / at or below the median" = "median", "in the top / bottom third" = "tertile"))),
+        conditionalPanel("input.set_mode == 'score'", radioButtons("set_scorecut", "Split the score at", choices = CUT_CHOICES))),
+      div(class = "set-col",
+        div(class = "set-col-title", "3  Patients included"),
+        checkboxGroupInput("set_stage", "Stage", inline = TRUE, choices = c("I", "II", "III", "IV"), selected = c("I", "II", "III", "IV")),
+        checkboxGroupInput("set_sex", "Sex", inline = TRUE, choices = c("Female", "Male"), selected = c("Female", "Male")),
+        sliderInput("set_age", "Age at diagnosis", min = 20, max = 90, value = c(20, 90), step = 1, width = "100%"),
+        checkboxGroupInput("set_margin", "Resection margin (CPTAC only)", inline = TRUE, choices = c("R0", "R1", "R2", "RX"), selected = c("R0", "R1", "R2", "RX")))),
+    uiOutput("set_summary"),
+    layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)), plotlyOutput("p_set_km", height = "520px"), plotlyOutput("p_set_hr", height = "520px")),
+    layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)), plotlyOutput("p_set_other", height = "480px"),
+                   conditionalPanel("input.set_mode == 'score'", plotlyOutput("p_set_spline", height = "480px"))),
+    fig_downloads("dl_sets"),
+    note("Survival of PDAC patients grouped by several genes at once. Each gene is called high or low relative to the other tumours of the same dataset ",
+         "(all patients with values for every selected gene, before the filters), at the median or as the top or bottom third; no cut-off is optimised per gene. ",
+         "'Number of genes' counts the genes in their chosen direction; neighbouring counts are merged until every group has at least ", SURV_MIN_GROUP, " patients. ",
+         "The combined score is the mean z-score with the sign of the chosen direction; it can be split at the median or at a data-driven cut-off whose p-value is corrected for the search. ",
+         "Hazard ratios come from Cox models (per additional gene, all vs fewer, or per standard deviation of the score), unadjusted and adjusted for age and stage. ",
+         "The plot below shows the same definition in the other, independent cohort (overall survival); a pattern that holds in both is more credible. ",
+         "Filters reduce the number of patients quickly: both cohorts are mostly resected tumours of stage I-II (TCGA-PAAD: 3 stage III and 3 stage IV; CPTAC: 39 stage III, 9 stage IV). ",
+         "These are exploratory, observational associations; with many combinations tried, some will reach p < 0.05 by chance.")),
   nav_panel("About", value = "about", includeMarkdown("www/about.md")),
   nav_spacer(),
   nav_item(tags$a(href = REPO_URL, target = "_blank", "Source code"))
@@ -200,7 +247,15 @@ server <- function(input, output, session) {
   sv_tab <- reactive(surv_table(cv())); cl_assoc <- reactive(clin_assoc(cv()))
   surv_sel <- reactive({ k <- strsplit(if (is.null(input$surv_set)) SURV_CHOICES[[1]] else input$surv_set, "|", fixed = TRUE)[[1]]; list(dataset = k[1], endpoint = k[2]) })
   surv_x <- reactive({ x <- cv(); if (is.null(x)) NULL else surv_data(x, surv_sel()$dataset, surv_sel()$endpoint) })
-  km <- reactive({ x <- surv_x(); if (is.null(x) || !nrow(x)) NULL else km_split(x) })
+  surv_cut <- reactive(if (identical(input$surv_cut, "maxstat")) "maxstat" else "median")
+  cutres <- reactive({ x <- surv_x(); if (surv_cut() != "maxstat" || is.null(x) || !nrow(x)) NULL else cut_maxstat(x) })
+  km <- reactive({ x <- surv_x(); if (is.null(x) || !nrow(x)) return(NULL)
+    if (surv_cut() == "maxstat") { cr <- cutres(); if (is.null(cr)) NULL else km_split(x, cr$cut) } else km_split(x) })
+  spl <- reactive(surv_spline(surv_x()))
+  other_ds <- reactive(other_cohort(surv_sel()$dataset))
+  other_x <- reactive({ x <- cv(); if (is.null(x)) NULL else surv_data(x, other_ds(), "os") })
+  other_q <- reactive(if (surv_cut() == "maxstat") { cr <- cutres(); if (is.null(cr)) NA_real_ else cr$q } else 0.5)
+  km_other <- reactive({ q <- other_q(); if (is.na(q)) NULL else transfer_split(other_x(), q) })
   in_moffitt <- reactive({ g <- gene(); g %in% MOFFITT_GENES })
   cx <- reactive(coexp_partners(D, gene()))
   cx_default <- reactive({ x <- cx(); if (is.null(x)) return(NULL); have <- unique(as.character(x$compartment))
@@ -222,7 +277,14 @@ server <- function(input, output, session) {
     ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())),
     phsites = reactive(plot_phospho_sites(ph_tab(), gene(), relative = ph_relmode(), has_sites = !is.null(ph()))),
     phsite = reactive(plot_cptac_paired(ph_site_pairs(FALSE), gene(), "phosphosite")),
-    km = reactive(plot_km(km(), surv_x(), gene(), surv_sel()$dataset, surv_sel()$endpoint)), hr = reactive(plot_hr(sv_tab(), gene())),
+    km = reactive({ cr <- cutres()
+      if (surv_cut() == "maxstat" && is.null(cr)) return(empty_plot(paste0(gene(), " (", surv_sel()$dataset, "): too few events or distinct values for a data-driven cut-off")))
+      plot_km(km(), surv_x(), gene(), surv_sel()$dataset, surv_sel()$endpoint, cut = if (!is.null(cr)) c(type = "maxstat", cr)) }),
+    hr = reactive(plot_hr(sv_tab(), gene())),
+    spline = reactive(plot_spline(spl(), gene(), surv_sel()$dataset, surv_sel()$endpoint, cut = cutres()$cut)),
+    km_other = reactive({ q <- other_q()
+      if (is.na(q)) return(empty_plot("No data-driven cut-off to check in the other cohort"))
+      plot_km(km_other(), other_x(), gene(), other_ds(), "os", transfer = list(from = surv_sel()$dataset, q = q, type = surv_cut())) }),
     stage = reactive(plot_stage(cv(), cl_assoc(), gene())), moffitt = reactive(plot_moffitt(cv(), cl_assoc(), gene(), in_moffitt())),
     coexp = reactive(if (is.null(cx())) empty_plot(paste0(gene(), ": not analysed in any cell type (not in the single-cell data or expressed in too few cells)")) else plot_coexp(cx_tab(), gene(), cx_cell(), cx_info())),
     coexp_pair = reactive(if (is.null(cx())) empty_plot("") else plot_coexp_pair(cx_pair(), gene(), cx_partner(), cx_cell())),
@@ -262,6 +324,7 @@ server <- function(input, output, session) {
 
   # ---- clinical context ----
   output$p_km <- renderPlotly(to_plotly(figs$km(), wrap = 95)); output$p_hr <- renderPlotly(to_plotly(figs$hr(), wrap = 78))
+  output$p_spline <- renderPlotly(to_plotly(figs$spline(), wrap = 85)); output$p_km_other <- renderPlotly(to_plotly(figs$km_other(), wrap = 85))
   output$p_stage <- renderPlotly(to_plotly(figs$stage(), wrap = 85)); output$p_moffitt <- renderPlotly(to_plotly(figs$moffitt(), wrap = 85))
   clin_csv <- reactive({ x <- cv(); if (is.null(x)) return(data.frame(note = paste("No tumour data for", gene())))
     x$value <- round(x$value, 3); names(x)[names(x) == "value"] <- paste0(gene(), "_value")
@@ -370,11 +433,12 @@ server <- function(input, output, session) {
                                formatRound(c("normal", "tumour", "diff"), 3, mark = ""), server = FALSE)
 
   # downloads: figure(s) + underlying data
-  save_figs <- function(file, plots, w, h, dev) {
+  save_figs <- function(file, plots, w, h, dev, ncol = NULL) {
     plots <- lapply(plots, for_export, width_in = w)
     if (length(plots) == 1) { ggsave(file, plots[[1]], width = w, height = h, device = dev, bg = "white", dpi = 200); return(invisible()) }
     if (dev == "pdf") { grDevices::pdf(file, width = w, height = h); for (p in plots) print(p); grDevices::dev.off() }
-    else ggsave(file, patchwork::wrap_plots(plots, ncol = length(plots)), width = w * length(plots), height = h, device = dev, bg = "white", dpi = 200)
+    else { nc <- if (is.null(ncol)) length(plots) else ncol
+      ggsave(file, patchwork::wrap_plots(plots, ncol = nc), width = w * nc, height = h * ceiling(length(plots) / nc), device = dev, bg = "white", dpi = 200) }
   }
   dl <- list(dl_cptac = list(stub = "CPTAC_tumour_vs_normal", plots = function() list(figs$prot(), figs$rna()), data = cptac_table, w = 6, h = 5),
              dl_bulk = list(stub = "TCGA_GTEx", plots = function() list(figs$bulk()), data = bk, w = 7, h = 5),
@@ -382,16 +446,91 @@ server <- function(input, output, session) {
              dl_states = list(stub = "tissue_states", plots = function() list(figs$states()), data = sc_table, w = 11, h = 8),
              dl_fibro = list(stub = "fibroblast_subtypes", plots = function() list(figs$fibro()), data = sc_table, w = 9, h = 5),
              dl_ductal = list(stub = "tumour_cell_states", plots = function() list(figs$ductal()), data = sc_table, w = 9, h = 5),
-             dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr()), data = clin_csv, w = 8, h = 6),
+             dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr(), figs$spline(), figs$km_other()), data = clin_csv, w = 8, h = 6, ncol = 2),
              dl_stage = list(stub = "stage", plots = function() list(figs$stage()), data = clin_csv, w = 11, h = 5),
              dl_moffitt = list(stub = "classical_basal", plots = function() list(figs$moffitt()), data = clin_csv, w = 11, h = 5),
              dl_coexp = list(stub = "coexpression", plots = function() list(figs$coexp(), figs$coexp_pair()), data = cx_csv, w = 8, h = 9),
              dl_umap = list(stub = "atlas_map", plots = function() list(figs$umap()), data = function() data.frame(note = "Atlas map values are a subsample; see the Data tab for per-sample values."), w = 7, h = 6))
   for (k in names(dl)) local({ kk <- k; s <- dl[[kk]]
     output[[paste0(kk, "_pdf")]] <- downloadHandler(fname(s$stub, "pdf"), function(file) save_figs(file, s$plots(), s$w, s$h, "pdf"))
-    output[[paste0(kk, "_png")]] <- downloadHandler(fname(s$stub, "png"), function(file) save_figs(file, s$plots(), s$w, s$h, "png"))
+    output[[paste0(kk, "_png")]] <- downloadHandler(fname(s$stub, "png"), function(file) save_figs(file, s$plots(), s$w, s$h, "png", s$ncol))
     output[[paste0(kk, "_csv")]] <- downloadHandler(fname(s$stub, "csv"), function(file) utils::write.csv(s$data(), file, row.names = FALSE))
   })
+
+  # ---- gene sets & survival ----
+  dir_defaults <- reactiveVal(list()); dir_ver <- reactiveVal(0L)
+  updateSelectizeInput(session, "set_genes", choices = gene_df, server = TRUE, selected = if (length(GS_EXAMPLES)) GS_EXAMPLES[[1]]$genes else NULL,
+                       options = list(valueField = "value", labelField = "label", searchField = c("label", "aliases", "name"), maxItems = GS_MAX_GENES,
+                                      plugins = list("remove_button"),
+                                      render = I("{ option: function(item, escape) { return '<div><b>' + escape(item.label) + '</b> <span class=\"opt-name\">' + escape(item.name) + '</span></div>'; } }")))
+  if (length(GS_EXAMPLES)) dir_defaults(stats::setNames(as.list(GS_EXAMPLES[[1]]$dirs), GS_EXAMPLES[[1]]$genes))
+  for (i in seq_along(GS_EXAMPLES)) local({ ii <- i; observeEvent(input[[paste0("gsx_", ii)]], {
+    ex <- GS_EXAMPLES[[ii]]; dir_defaults(stats::setNames(as.list(ex$dirs), ex$genes)); dir_ver(dir_ver() + 1L)
+    updateSelectizeInput(session, "set_genes", choices = gene_df, selected = ex$genes, server = TRUE) }) })
+  set_genes <- reactive(utils::head(intersect(input$set_genes, D$genes$symbol), GS_MAX_GENES))
+  output$set_dirs_ui <- renderUI({ g <- set_genes(); dd <- dir_defaults(); v <- dir_ver()
+    if (!length(g)) return(note("Choose one or more genes."))
+    lapply(g, function(x) { cur <- isolate(input[[dir_id(x, v)]]); sel <- if (!is.null(cur)) cur else if (!is.null(dd[[x]])) dd[[x]] else "high"
+      div(class = "dir-row", span(class = "dir-gene", x), radioButtons(dir_id(x, v), NULL, inline = TRUE, choices = c("high", "low"), selected = sel)) }) })
+  set_dirs <- reactive({ g <- set_genes(); ver <- dir_ver(); vapply(g, function(x) { v <- input[[dir_id(x, ver)]]; if (is.null(v)) { d <- dir_defaults()[[x]]; if (is.null(d)) "high" else d } else v }, "") })
+  set_sel <- reactive({ k <- strsplit(if (is.null(input$set_surv)) SURV_CHOICES[[1]] else input$set_surv, "|", fixed = TRUE)[[1]]; list(dataset = k[1], endpoint = k[2]) })
+  set_mode <- reactive(if (is.null(input$set_mode)) "graded" else input$set_mode)
+  set_cut <- reactive(if (identical(input$set_cut, "tertile")) "tertile" else "median")
+  set_scorecut <- reactive(if (identical(input$set_scorecut, "maxstat")) "maxstat" else "median")
+  set_filters <- reactive(list(stage = input$set_stage, sex = input$set_sex, age = input$set_age, margin = input$set_margin))
+  gv_all <- reactive({ g <- set_genes(); req(length(g)); stats::setNames(lapply(CLIN_DATASETS, function(ds) geneset_values(D, g, ds)), CLIN_DATASETS) })
+  set_frame <- function(ds, ep, filters = set_filters()) { gv <- gv_all()[[ds]]; if (is.null(gv) || !is.null(gv$missing)) NULL else geneset_frame(gv, set_dirs(), ep, set_cut(), filters) }
+  set_x <- reactive(set_frame(set_sel()$dataset, set_sel()$endpoint))
+  set_n_all <- reactive({ x <- set_frame(set_sel()$dataset, set_sel()$endpoint, list()); if (is.null(x)) 0L else nrow(x) })
+  set_cutres <- reactive({ x <- set_x(); if (set_mode() != "score" || set_scorecut() != "maxstat" || is.null(x)) NULL else cut_maxstat(transform(x, value = score)) })
+  set_group <- function(x, mode, cut = NULL) {
+    k <- length(set_genes())
+    switch(mode, graded = geneset_groups(x$value_count, k),
+           all = factor(ifelse(x$all == 1L, paste0("all ", k), "fewer"), levels = c(paste0("all ", k), "fewer")),
+           score = factor(ifelse(x$score > (if (is.null(cut)) stats::median(x$score) else cut), "High score", "Low score"), levels = c("High score", "Low score")))
+  }
+  set_km <- reactive({ x <- set_x(); if (is.null(x) || !nrow(x)) return(NULL); cr <- set_cutres()
+    if (set_mode() == "score" && set_scorecut() == "maxstat" && is.null(cr)) return(NULL)
+    km_groups(x, set_group(x, set_mode(), cr$cut)) })
+  set_other <- reactive({ od <- other_cohort(set_sel()$dataset); x <- set_frame(od, "os"); if (is.null(x) || !nrow(x)) return(list(ds = od, x = x, km = NULL))
+    q <- if (set_mode() == "score") { cr <- set_cutres(); if (set_scorecut() == "maxstat") { if (is.null(cr)) return(list(ds = od, x = x, km = NULL)) else cr$q } else 0.5 } else NA
+    cut <- if (!is.na(q)) unname(stats::quantile(x$score, q)) else NULL
+    list(ds = od, x = x, q = q, km = km_groups(x, set_group(x, set_mode(), cut))) })
+  set_cox <- reactive({ s <- surv_setups(data.frame(dataset = factor(CLIN_DATASETS, levels = CLIN_DATASETS))); req(s)
+    do.call(rbind, lapply(seq_len(nrow(s)), function(i) { x <- set_frame(s$dataset[i], s$endpoint[i])
+      do.call(rbind, lapply(c(FALSE, TRUE), function(adj) { h <- geneset_cox(x, set_mode(), adj)
+        data.frame(dataset = s$dataset[i], endpoint = s$endpoint[i], label = s$label[i], model = if (adj) "adjusted for age and stage" else "unadjusted",
+                   n = h$n, events = h$events, hr = h$hr, ci_low = h$lo, ci_high = h$hi, p = h$p, stringsAsFactors = FALSE) })) })) })
+  set_missing <- reactive({ m <- unique(unlist(lapply(gv_all(), `[[`, "missing"))); m })
+  output$set_summary <- renderUI({ g <- set_genes(); if (!length(g)) return(NULL); x <- set_x(); sc <- set_cox()
+    r <- sc[sc$dataset == set_sel()$dataset & sc$endpoint == set_sel()$endpoint, ]
+    gv <- gv_all()[[set_sel()$dataset]]
+    msg <- if (!is.null(gv$missing)) paste0(set_sel()$dataset, ": not available for ", paste(gv$missing, collapse = ", "), " (not measured in this dataset); choose another dataset.") else
+      txt_geneset(x, list(hr = r$hr[1], lo = r$ci_low[1], hi = r$ci_high[1], p = r$p[1]), list(hr = r$hr[2], lo = r$ci_low[2], hi = r$ci_high[2], p = r$p[2]),
+                  g, set_dirs(), set_sel()$dataset, set_sel()$endpoint, set_mode(), set_n_all())
+    div(class = "set-summary", p(msg)) })
+  figs$set_km <- reactive({ req(length(set_genes())); cr <- set_cutres()
+    plot_km_sets(set_km(), set_x(), set_genes(), set_dirs(), set_sel()$dataset, set_sel()$endpoint, set_mode(), cutinfo = cr) })
+  figs$set_hr <- reactive(plot_hr(set_cox(), "Gene set", unit = switch(set_mode(), graded = "additional gene", all = "all vs fewer", score = "SD of the score"),
+                                  title = "Gene set: hazard ratios in each dataset",
+                                  subtitle = paste0(gs_desc(set_genes(), set_dirs()), "; same filters\nfilled = unadjusted, open = adjusted for age and stage; bars = 95% CI; > 1 = shorter survival")))
+  figs$set_other <- reactive({ req(length(set_genes())); o <- set_other()
+    plot_km_sets(o$km, o$x, set_genes(), set_dirs(), o$ds, "os", set_mode(),
+                 transfer = list(from = set_sel()$dataset, q = o$q, cut = if (set_cut() == "median") "median" else "thirds")) })
+  figs$set_spline <- reactive({ x <- set_x(); req(set_mode() == "score")
+    plot_spline(if (is.null(x)) NULL else surv_spline(transform(x, value = score)), "combined score", set_sel()$dataset, set_sel()$endpoint, cut = set_cutres()$cut,
+                xlab = "Combined score (mean z-score, signed by the chosen direction)") })
+  output$p_set_km <- renderPlotly(to_plotly(figs$set_km(), wrap = 95)); output$p_set_hr <- renderPlotly(to_plotly(figs$set_hr(), wrap = 78))
+  output$p_set_other <- renderPlotly(to_plotly(figs$set_other(), wrap = 85)); output$p_set_spline <- renderPlotly(to_plotly(figs$set_spline(), wrap = 85))
+  set_csv <- reactive({ x <- set_x(); if (is.null(x) || !nrow(x)) return(data.frame(note = "No patients with values for all genes after the filters"))
+    cr <- set_cutres(); x$group <- as.character(set_group(x, set_mode(), cr$cut)); x$dataset <- set_sel()$dataset; x$endpoint <- set_sel()$endpoint
+    x$time_months <- round(x$time, 2); x$score <- round(x$score, 4)
+    x[, c("dataset", "endpoint", "patient", set_genes(), paste0("in_direction_", set_genes()), "value_count", "score", "group", "time_months", "event", "age", "sex", "stage", "residual")] })
+  set_fname <- function(ext) function() paste0("gene_set_survival_", paste(set_genes(), collapse = "_"), "_", format(Sys.Date()), ".", ext)
+  set_plots <- function() c(list(figs$set_km(), figs$set_hr(), figs$set_other()), if (set_mode() == "score") list(figs$set_spline()))
+  output$dl_sets_pdf <- downloadHandler(set_fname("pdf"), function(file) save_figs(file, set_plots(), 8, 6, "pdf"))
+  output$dl_sets_png <- downloadHandler(set_fname("png"), function(file) save_figs(file, set_plots(), 8, 6, "png", 2))
+  output$dl_sets_csv <- downloadHandler(set_fname("csv"), function(file) utils::write.csv(set_csv(), file, row.names = FALSE))
 
   # ---- compare genes ----
   multi <- eventReactive(input$go_multi, { pl <- parse_gene_list(input$genelist, D); pl$genes <- utils::head(pl$genes, 40); pl }, ignoreNULL = FALSE)

@@ -218,46 +218,94 @@ SURV_COLS <- c(High = "#eb6834", Low = "#2a78d6")
 CLIN_SOURCE <- c("TCGA-PAAD RNA" = "TCGA-PAAD via recount3; survival endpoints from the TCGA Pan-Cancer Clinical Data Resource (Liu et al., Cell 2018)",
                  "CPTAC protein" = "CPTAC PDAC (Cao et al., Cell 2021) via LinkedOmics", "CPTAC RNA" = "CPTAC PDAC (Cao et al., Cell 2021) via LinkedOmics")
 
-# Kaplan-Meier curves of the median split; numbers at risk every 12 months below the curves
-plot_km <- function(km, x, symbol, dataset, endpoint) {
-  what <- tolower(SURV_ENDPOINTS[[endpoint]])
-  if (is.null(x) || !nrow(x)) return(empty_plot(paste0(symbol, ": no ", dataset, " values with ", what)))
-  if (is.null(km)) return(empty_plot(paste0(symbol, " (", dataset, "): too many identical values or too few events for a median split")))
-  st <- km$steps; st$text <- paste0(st$group, " ", symbol, " (", km$n[st$group], " patients)<br>", fmt_num(st$time, 1), " months: ", fmt_pct(st$surv),
-                                    " event-free<br>at risk: ", st$n_risk)
+# Kaplan-Meier curves for any grouping (km_groups()); numbers at risk every 12 months below the curves, one row per group
+km_plot <- function(km, cols, title, subtitle, caption, ylab = "Alive", what = "", end_labels = FALSE) {
+  st <- km$steps; nlv <- length(km$levels)
+  st$text <- paste0(st$group, what, " (", km$n[st$group], " patients)<br>", fmt_num(st$time, 1), " months: ", fmt_pct(st$surv), " event-free<br>at risk: ", st$n_risk)
+  st$group <- factor(st$group, levels = km$levels)
   cen <- st[st$n_censor > 0, ]
-  ar <- km$at_risk; ar$y <- ifelse(ar$group == "High", -0.07, -0.14)
-  mtxt <- function(g) if (is.na(km$median[[g]])) "not reached" else paste(fmt_num(km$median[[g]], 1), "months")
+  pad <- (0.05 + 0.016 * max(nchar(km$levels))) * max(st$time)          # room left of time 0 for the row labels
+  step <- 0.07; ar <- km$at_risk; ar$group <- factor(ar$group, levels = km$levels); ar$y <- -step * as.integer(ar$group)
   ggplot(st, aes(time, surv, colour = group)) +
     geom_step(aes(group = group), linewidth = 0.7) + geom_point(aes(text = text), size = 0.1, alpha = 0) +
     geom_point(data = cen, shape = 3, size = 1.6, stroke = 0.6) +
     geom_text(data = ar, aes(time, y, label = n, colour = group), size = 3, show.legend = FALSE) +
+    geom_text(data = data.frame(group = factor(km$levels, levels = km$levels), y = -step * seq_len(nlv)),
+              aes(x = -pad / 2, y = y, label = group, colour = group), size = 3, show.legend = FALSE, inherit.aes = FALSE) +   # row labels = legend
     geom_hline(yintercept = 0, colour = INK[["grid"]], linewidth = 0.3) +
-    scale_colour_manual(values = SURV_COLS, guide = "none") +
-    scale_y_continuous(limits = c(-0.17, 1), breaks = seq(0, 1, 0.25), labels = function(v) paste0(round(100 * v), "%")) +
-    scale_x_continuous(breaks = unique(ar$time)) +
-    labs(x = "Months", y = if (endpoint == "os") "Alive" else "Free of progression",
-         title = paste0(symbol, " and ", what, ": ", dataset),
-         subtitle = paste0("Orange = above the median (", km$n[["High"]], " patients, ", km$events[["High"]], " events; median ", mtxt("High"), ")\nblue = at or below (",
-                           km$n[["Low"]], ", ", km$events[["Low"]], "; ", mtxt("Low"), "); log-rank p = ", fmt_p(km$p), "; numbers at risk below the curves"),
-         caption = src_caption("Data: ", CLIN_SOURCE[[dataset]], ". Exploratory; median split, no optimised cut-point")) + theme_px()
+    scale_colour_manual(values = cols, guide = "none") +
+    scale_y_continuous(limits = c(-step * nlv - 0.03, 1), breaks = seq(0, 1, 0.25), labels = function(v) paste0(round(100 * v), "%")) +
+    scale_x_continuous(breaks = unique(ar$time), limits = c(-pad, NA)) +
+    labs(x = "Months", y = ylab, title = title, subtitle = subtitle, caption = caption) + theme_px()
+}
+km_median_txt <- function(km, g) if (is.na(km$median[[g]])) "not reached" else paste(fmt_num(km$median[[g]], 1), "months")
+ordinal <- function(q) { n <- round(100 * q); paste0(n, if (n %% 100 %in% 11:13) "th" else c("th", "st", "nd", "rd", rep("th", 6))[n %% 10 + 1]) }
+
+# single gene, two groups. cut: NULL = median; list(type = "maxstat", p, q) = data-driven cut-off (p corrected for the search);
+# transfer: list(from = dataset, q) = the split found in another cohort applied here at the same percentile
+plot_km <- function(km, x, symbol, dataset, endpoint, cut = NULL, transfer = NULL) {
+  what <- tolower(SURV_ENDPOINTS[[endpoint]])
+  if (is.null(x) || !nrow(x)) return(empty_plot(paste0(symbol, ": no ", dataset, " values with ", what)))
+  if (is.null(km)) return(empty_plot(paste0(symbol, " (", dataset, "): too many identical values or too few events for this split")))
+  grp <- function(g) paste0(km$n[[g]], " patients, ", km$events[[g]], " events; median ", km_median_txt(km, g))
+  if (!is.null(transfer)) {
+    ttl <- paste0(symbol, ": same split in ", dataset, " (", what, ")")
+    sub <- paste0("Split at the ", ordinal(transfer$q), " percentile, as ", if (transfer$type == "maxstat") "found" else "used", " in ", transfer$from,
+                  "\nOrange = above (", grp("High"), "), blue = at or below (", grp("Low"), ")\nlog-rank p = ", fmt_p(km$p),
+                  " (no search in this cohort)")
+    cap <- paste0("Data: ", CLIN_SOURCE[[dataset]], ". An independent cohort: a split that only fits the first cohort by chance usually fails here")
+  } else if (!is.null(cut) && identical(cut$type, "maxstat")) {
+    ttl <- paste0(symbol, " and ", what, ": ", dataset)
+    sub <- paste0("Data-driven cut-off at the ", ordinal(cut$q), " percentile (value ", fmt_num(km$cut), "); orange = above (", grp("High"), ")",
+                  "\nblue = at or below (", grp("Low"), "); p = ", fmt_p(cut$p), " corrected for the search over cut-offs; numbers at risk below")
+    cap <- paste0("Data: ", CLIN_SOURCE[[dataset]], ". Cut-off maximises the log-rank statistic (20th-80th percentile); exploratory")
+  } else {
+    ttl <- paste0(symbol, " and ", what, ": ", dataset)
+    sub <- paste0("Orange = above the median (", grp("High"), ")\nblue = at or below (", grp("Low"), "); log-rank p = ", fmt_p(km$p), "; numbers at risk below the curves")
+    cap <- paste0("Data: ", CLIN_SOURCE[[dataset]], ". Exploratory; median split, no optimised cut-point")
+  }
+  km_plot(km, SURV_COLS, ttl, sub, src_caption(cap), if (endpoint == "os") "Alive" else "Free of progression", paste0(" ", symbol))
+}
+
+# hazard ratio across the range of values (spline Cox model), relative to a patient at the median
+plot_spline <- function(sp, symbol, dataset, endpoint, cut = NULL, xlab = NULL) {
+  what <- tolower(SURV_ENDPOINTS[[endpoint]])
+  if (is.null(sp)) return(empty_plot(paste0(symbol, " (", dataset, "): too few events or values for a hazard curve")))
+  cv <- sp$curve
+  cv$text <- paste0(symbol, " = ", fmt_num(cv$value), "<br>hazard ratio vs median: ", fmt_num(cv$hr), " (", fmt_num(cv$lo), " to ", fmt_num(cv$hi), ")")
+  lo <- min(0.25, min(cv$lo)); hi <- max(4, max(cv$hi))
+  rug <- data.frame(value = sp$values, y = lo, yend = lo * 1.18)
+  p <- ggplot(cv, aes(value, hr)) + geom_hline(yintercept = 1, colour = INK[["muted"]], linewidth = 0.3) +
+    geom_ribbon(aes(ymin = lo, ymax = hi), fill = "#cde2fb", alpha = 0.7) + geom_line(colour = ONE_SERIES, linewidth = 0.8) +
+    geom_point(aes(text = text), size = 0.1, alpha = 0) +
+    geom_segment(data = rug, aes(x = value, xend = value, y = y, yend = yend), colour = INK[["muted"]], linewidth = 0.3, inherit.aes = FALSE) +
+    geom_vline(xintercept = sp$median, colour = INK[["secondary"]], linetype = "dashed", linewidth = 0.3)
+  if (!is.null(cut)) p <- p + geom_vline(xintercept = cut, colour = "#eb6834", linetype = "dashed", linewidth = 0.4)
+  p + scale_y_log10(breaks = c(0.25, 0.5, 1, 2, 4, 8), limits = c(lo, hi)) +
+    labs(x = if (is.null(xlab)) paste0(symbol, " (", dataset, ", log2)") else xlab, y = "Hazard ratio vs median (log scale)",
+         title = paste0("Hazard across ", symbol, " levels: ", what, ", ", dataset),
+         subtitle = paste0("Cox model with a smooth curve (spline, 3 df); band = 95% CI; grey dashed = median", if (!is.null(cut)) ", orange dashed = data-driven cut-off" else "",
+                           "\np = ", fmt_p(sp$p_any), " for any association, p = ", fmt_p(sp$p_nonlinear), " for a departure from a straight line; ",
+                           sp$n, " patients, ", sp$events, " events; ticks = patients"),
+         caption = src_caption("A bend in the curve suggests a threshold; a straight line, a gradual effect")) + theme_px()
 }
 
 # hazard ratio per standard deviation for every dataset and endpoint, unadjusted (filled) and adjusted (open)
-plot_hr <- function(tab, symbol) {
+plot_hr <- function(tab, symbol, unit = "SD", title = paste0(symbol, ": hazard ratios"),
+                    subtitle = "Cox models of the continuous value; > 1 = higher value, shorter survival\nfilled = unadjusted, open = adjusted for age and stage; bars = 95% CI") {
   if (is.null(tab) || all(is.na(tab$hr))) return(empty_plot(paste0(symbol, ": not enough data for survival models")))
   tab$row <- factor(sub(": ", "\n", tab$label, fixed = TRUE), levels = rev(unique(sub(": ", "\n", tab$label, fixed = TRUE))))
   tab$y <- as.numeric(tab$row) + ifelse(tab$model == "unadjusted", 0.15, -0.15)
-  tab$text <- paste0(tab$label, " (", tab$model, ")<br>HR per SD ", fmt_num(tab$hr), " (95% CI ", fmt_num(tab$ci_low), " to ", fmt_num(tab$ci_high), ")<br>p = ",
+  tab$text <- paste0(tab$label, " (", tab$model, ")<br>HR per ", unit, " ", fmt_num(tab$hr), " (95% CI ", fmt_num(tab$ci_low), " to ", fmt_num(tab$ci_high), ")<br>p = ",
                      fmt_p(tab$p), "; ", tab$n, " patients, ", tab$events, " events")
   tt <- tab[!is.na(tab$hr), ]
   ggplot(tt, aes(hr, y, text = text)) + geom_vline(xintercept = 1, colour = INK[["muted"]], linewidth = 0.3) +
     geom_errorbar(aes(xmin = ci_low, xmax = ci_high), width = 0, colour = INK[["secondary"]], linewidth = 0.4, orientation = "y") +
     geom_point(aes(shape = model), size = 2.6, colour = ONE_SERIES, fill = "white", stroke = 0.8) +
     scale_shape_manual(values = c("unadjusted" = 16, "adjusted for age and stage" = 21), guide = "none") +
-    scale_x_log10(breaks = c(0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 3, 4), labels = function(v) format(v, drop0trailing = TRUE)) + scale_y_continuous(breaks = seq_along(levels(tab$row)), labels = levels(tab$row), limits = c(0.5, nlevels(tab$row) + 0.5)) +
-    labs(x = "Hazard ratio per SD (log scale)", y = NULL,
-         title = paste0(symbol, ": hazard ratios"), subtitle = "Cox models of the continuous value; > 1 = higher value, shorter survival\nfilled = unadjusted, open = adjusted for age and stage; bars = 95% CI",
+    scale_x_log10(breaks = if (max(tt$ci_high, na.rm = TRUE) / min(tt$ci_low, na.rm = TRUE) > 4) c(0.125, 0.25, 0.5, 1, 2, 4, 8, 16) else c(0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 3, 4),
+                  labels = function(v) format(v, drop0trailing = TRUE)) + scale_y_continuous(breaks = seq_along(levels(tab$row)), labels = levels(tab$row), limits = c(0.5, nlevels(tab$row) + 0.5)) +
+    labs(x = paste0("Hazard ratio per ", unit, " (log scale)"), y = NULL, title = title, subtitle = subtitle,
          caption = src_caption("Exploratory: p-values are not adjusted for the many genes one can look at")) + theme_px() +
     theme(panel.grid.major.y = element_blank())
 }
@@ -326,4 +374,26 @@ plot_coexp_pair <- function(pp, symbol, partner, compartment) {
          subtitle = paste0("One dot per tumour sample; study-adjusted rho = ", fmt_num(attr(pp, "r"), 3), " (p = ", fmt_p(attr(pp, "p")), ", ", nrow(pp),
                            " samples); without study adjustment rho = ", fmt_num(attr(pp, "r_raw"), 3)),
          caption = src_caption("Data: Loveless et al., Clin Cancer Res 2025 single-cell atlas")) + theme_px()
+}
+
+# ---- gene sets ----------------------------------------------------------------------------------------------------
+gs_cols <- function(levels) stats::setNames(grDevices::colorRampPalette(c("#86b6ef", "#0d366b"))(length(levels)), levels)
+gs_desc <- function(genes, dirs) paste0(genes, ifelse(dirs == "high", " high", " low"), collapse = ", ")
+GS_MODE_LABEL <- c(graded = "number of genes in the chosen direction", all = "all genes in the chosen direction vs fewer", score = "combined score")
+plot_km_sets <- function(km, x, genes, dirs, dataset, endpoint, mode, cutinfo = NULL, transfer = NULL) {
+  what <- tolower(SURV_ENDPOINTS[[endpoint]]); set <- gs_desc(genes, dirs)
+  if (is.null(x) || !nrow(x)) return(empty_plot(paste0("No ", dataset, " patients with values for all genes and ", what, " after the filters")))
+  if (is.null(km)) return(empty_plot(paste0(dataset, ": groups too small (< ", SURV_MIN_GROUP, " patients) or < ", SURV_MIN_EVENTS, " events after the filters")))
+  grp <- paste0(km$levels, ": ", km$n, " patients, ", km$events, " events, median ", vapply(km$levels, function(g) km_median_txt(km, g), ""), collapse = "\n")
+  ttl <- paste0(if (!is.null(transfer)) paste0("Same definition in ", dataset) else dataset, ": ", what)
+  sub <- switch(mode,
+    graded = paste0(set, "; groups = genes in the chosen direction (darker = more)", if (!is.null(transfer)) paste0("\nCalls made within ", dataset, " (", transfer$cut, ")") else "",
+                    "\n", grp, "\nlog-rank p = ", fmt_p(km$p), " (all groups)"),
+    all = paste0(set, "\n", grp, "\nlog-rank p = ", fmt_p(km$p)),
+    score = paste0("Combined score of ", set, if (!is.null(transfer)) paste0("; split at the ", ordinal(transfer$q), " percentile as in ", transfer$from) else
+                     if (!is.null(cutinfo)) paste0("; data-driven cut-off at the ", ordinal(cutinfo$q), " percentile") else "; split at the median",
+                   "\n", grp, "\n", if (!is.null(cutinfo) && is.null(transfer)) paste0("p = ", fmt_p(cutinfo$p), " corrected for the search over cut-offs") else paste0("log-rank p = ", fmt_p(km$p))))
+  cols <- if (mode == "graded") gs_cols(km$levels) else stats::setNames(c("#eb6834", "#2a78d6"), km$levels)
+  km_plot(km, cols, ttl, sub, src_caption("Data: ", CLIN_SOURCE[[dataset]], ". Exploratory; calls relative to the other tumours of the same dataset"),
+          if (endpoint == "os") "Alive" else "Free of progression", "", end_labels = TRUE)
 }
