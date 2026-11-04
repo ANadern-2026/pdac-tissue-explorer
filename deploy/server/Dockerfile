@@ -18,7 +18,7 @@ WORKDIR /srv/pdac
 COPY get_data.R /srv/pdac/get_data.R
 COPY data-raw/05_build_store.R data-raw/helpers.R /srv/pdac/data-raw/
 COPY app/ /srv/pdac/app/
-RUN mkdir -p /srv/pdac/app/data && chown -R shiny:shiny /srv/pdac
+RUN mkdir -p /srv/pdac/app/data /srv/pdac/usage && chown -R shiny:shiny /srv/pdac
 
 USER shiny
 EXPOSE 3838

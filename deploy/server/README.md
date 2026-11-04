@@ -24,3 +24,12 @@ sudo docker compose up -d
 Update to a new version: `cd /opt/pdac-tissue-explorer && sudo git pull && cd deploy/server && sudo docker compose up -d --build`.
 If the release notes say the data changed, run `sudo docker compose run --rm app Rscript get_data.R` before `up -d` (it only downloads or rebuilds what is missing or outdated).
 Logs: `sudo docker compose logs -f app` (or `caddy`).
+
+## Usage counts
+
+The app counts visits and in-app usage anonymously (`app/R/05_usage.R`): a random visit id, start and end time, the referring site's host name, a screen-size class, an optional `?ref=` tag in the address, and the pages, tabs, genes and downloads used. No cookies, IP addresses or browser details are stored. The counts are in `usage.sqlite` in the Docker volume `pdac-usage`, separate from the data volume.
+
+* Set `PDAC_STATS_KEY` and `PDAC_STATS_PASSWORD` in `.env` (e.g. `openssl rand -hex 16` each) and run `sudo docker compose up -d`; then open `https://<domain>/?stats=<PDAC_STATS_KEY>` and enter the password. Without the exact key the app shows the normal site, with no prompt or hint of the page. The visit that opens the page is not counted, and the page can stop counting your own browser.
+* Tag links you post with `?ref=...` (e.g. `https://<domain>/?ref=linkedin`) to see them separately.
+* Back up the counts: `sudo docker compose cp app:/srv/pdac/usage/usage.sqlite ./usage-$(date +%F).sqlite`.
+* Local runs (RStudio) count nothing: counting needs the variable `PDAC_USAGE_DB`, which only `compose.yaml` sets.

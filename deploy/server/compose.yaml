@@ -11,8 +11,15 @@ services:
       dockerfile: deploy/server/Dockerfile
       network: host        # the image build downloads Ubuntu packages through the server's own network
     restart: unless-stopped
+    environment:
+      # usage counting (app/R/05_usage.R): anonymous visit and usage counts, kept in their own volume;
+      # the private stats page (https://<domain>/?stats=<PDAC_STATS_KEY>) is enabled only when both secrets are set in .env
+      PDAC_USAGE_DB: /srv/pdac/usage/usage.sqlite
+      PDAC_STATS_KEY: ${PDAC_STATS_KEY:-}
+      PDAC_STATS_PASSWORD: ${PDAC_STATS_PASSWORD:-}
     volumes:
       - pdac-data:/srv/pdac/app/data
+      - pdac-usage:/srv/pdac/usage
     networks: [pdac]
 
   caddy:
@@ -41,5 +48,6 @@ networks:
 
 volumes:
   pdac-data:
+  pdac-usage:
   caddy-data:
   caddy-config:

@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
 if (FALSE) { library(markdown); library(patchwork); library(scales); library(survival); library(maxstat); library(splines) }
 for (f in sort(list.files("R", pattern = "\\.R$", full.names = TRUE))) source(f, local = TRUE)
 D <- load_app_data()            # gene index + small tables in memory; per-gene values are read from the on-disk store
-onStop(function() close_app_data(D))
+onStop(function() { close_app_data(D); usage_close() })
 
 EXAMPLE_GENES <- intersect(c("MSLN", "KRT17", "FAP", "GATA6", "CEACAM5", "COL11A1", "CD274", "KRT19"), D$genes$symbol)
 EXAMPLE_LISTS <- list(
@@ -74,7 +74,7 @@ dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", forma
 # ---- UI ------------------------------------------------------------------------------------------------------
 ui <- page_navbar(
   title = span(APP_TITLE, span(class = "badge-version", paste0("v", APP_VERSION))), theme = theme_app, id = "nav", fillable = FALSE,
-  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE)),
+  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE), if (USAGE_ON) usage_js()),
                    if (length(MOVED_TO)) div(class = "moved-banner", strong("This app has moved: "),
                                              a(href = MOVED_TO[1], target = "_top", sub("/$", "", sub("^https?://", "", MOVED_TO[1]))),
                                              if (length(MOVED_TO) > 1) span(" ", MOVED_TO[2]))),
@@ -210,6 +210,24 @@ ui <- page_navbar(
 
 # ---- server --------------------------------------------------------------------------------------------------
 server <- function(input, output, session) {
+  # ---- usage counting (only on the server, see R/05_usage.R) ----
+  tr <- usage_tracker(session)
+  if (USAGE_ON) {
+    observeEvent(input$usage_client, tr$start(input$usage_client), once = TRUE)
+    session$onSessionEnded(function() tr$end())
+    observeEvent(input$nav, tr$log("page", input$nav), ignoreInit = TRUE)
+    observeEvent(input$gene_tabs, tr$log("tab", input$gene_tabs), ignoreInit = TRUE)
+    first_gene <- TRUE                                     # the random start gene is not a lookup
+    observeEvent(input$gene, { g <- input$gene; if (!nzchar(g) || !g %in% D$genes$symbol) return()
+      if (first_gene) { first_gene <<- FALSE; return() }; tr$log("gene", g) })
+    observeEvent(input$go_multi, { pl <- parse_gene_list(input$genelist, D); tr$log("compare", paste0(length(pl$genes), " genes: ", paste(utils::head(pl$genes, 40), collapse = ","))) })
+    set_genes_d <- debounce(reactive(input$set_genes), 4000)
+    first_set <- TRUE                                      # the pre-filled example set is not a choice either
+    observeEvent(set_genes_d(), { g <- set_genes_d(); if (!length(g)) return()
+      if (first_set) { first_set <<- FALSE; return() }; tr$log("geneset", paste(sort(g), collapse = ",")) })
+    observeEvent(input$usage_dl, tr$log("download", input$usage_dl))
+  }
+  if (STATS_ON) stats_server(input, output, session, tr)
   if (length(MOVED_TO)) showModal(modalDialog(
     title = paste(APP_TITLE, "has moved"), easyClose = TRUE,
     p("The app now runs at its permanent address:"),

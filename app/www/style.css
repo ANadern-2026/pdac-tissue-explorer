@@ -61,3 +61,10 @@ body { background: #fcfcfb; }
 .set-settings .radio label, .set-settings .checkbox label { display: inline-flex; gap: 0.45rem; align-items: baseline; }
 .set-settings .radio label input, .set-settings .checkbox label input { flex: 0 0 auto; position: relative; top: 0.12em; }
 @media (max-width: 860px) { .set-band { grid-template-columns: 1fr; } }
+/* private usage page (?stats) */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin: 0 0 1rem 0; }
+.stat-tile { background: #ffffff; border: 1px solid #e9e8e4; border-radius: 6px; padding: 0.7rem 0.9rem; }
+.stat-value { font-size: 1.6rem; font-weight: 700; color: #0b0b0b; line-height: 1.2; }
+.stat-label { font-size: 0.85rem; color: #0b0b0b; font-weight: 600; }
+.stat-sub { font-size: 0.75rem; color: #8a8984; margin-top: 0.15rem; }
+.stats-nocount { font-size: 0.85rem; align-self: center; margin-bottom: 0.5rem; }
