@@ -1,14 +1,14 @@
 cff-version: 1.2.0
 message: "If you use the PDAC Tissue Explorer, please cite it and the original data sources listed below."
-title: "PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue"
+title: "PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue and model systems"
 type: software
 authors:
   - family-names: "Nadernezhad"
     given-names: "Ali"
     affiliation: "Leibniz-Institut für Polymerforschung Dresden e.V."
     orcid: "https://orcid.org/0000-0002-3761-1601"
-version: 0.1.0
-date-released: "2026-10-09"
+version: 0.3.0
+date-released: "2026-11-05"
 doi: "10.5281/zenodo.23264879"
 identifiers:
   - type: doi
@@ -18,12 +18,15 @@ identifiers:
     value: "10.5281/zenodo.23264880"
     description: "Software, version 0.1.0"
   - type: doi
-    value: "10.5281/zenodo.23264998"
-    description: "Processed data files (dataset)"
+    value: "10.5281/zenodo.23264997"
+    description: "Processed data files (dataset, all versions)"
+  - type: doi
+    value: "10.5281/zenodo.23977456"
+    description: "Processed data files, version 0.3.0 (read by get_data.R)"
 license: MIT
 repository-code: "https://github.com/ANadern-2026/pdac-tissue-explorer"
 url: "https://pdac.biointeract.space/"
-keywords: [pancreatic cancer, PDAC, single-cell RNA-seq, proteomics, CPTAC, TCGA, GTEx, Shiny]
+keywords: [pancreatic cancer, PDAC, single-cell RNA-seq, proteomics, phosphoproteomics, survival, CPTAC, TCGA, GTEx, DepMap, organoids, HCMI, Shiny]
 references:
   - type: article
     title: "Proteogenomic characterization of pancreatic ductal adenocarcinoma"
@@ -81,3 +84,56 @@ references:
     volume: 47
     start: 1168
     doi: "10.1038/ng.3398"
+  - type: data
+    title: "DepMap Public 26Q3"
+    authors: [{name: "DepMap, Broad"}]
+    year: 2026
+    url: "https://depmap.org/portal/"
+    license: CC-BY-4.0
+  - type: article
+    title: "Defining a cancer dependency map"
+    authors: [{family-names: "Tsherniak", given-names: "Aviad"}]
+    journal: "Cell"
+    year: 2017
+    volume: 170
+    start: 564
+    doi: "10.1016/j.cell.2017.06.010"
+  - type: article
+    title: "Quantitative proteomics of the Cancer Cell Line Encyclopedia"
+    authors: [{family-names: "Nusinow", given-names: "David P."}]
+    journal: "Cell"
+    year: 2020
+    volume: 180
+    start: 387
+    doi: "10.1016/j.cell.2019.12.023"
+  - type: article
+    title: "Organoid profiling identifies common responders to chemotherapy in pancreatic cancer"
+    authors: [{family-names: "Tiriac", given-names: "Hervé"}]
+    journal: "Cancer Discovery"
+    year: 2018
+    volume: 8
+    start: 1112
+    doi: "10.1158/2159-8290.CD-18-0349"
+  - type: article
+    title: "A compendium of next-generation patient-derived models for diverse cancers"
+    authors: [{family-names: "ElHarouni", given-names: "Dina"}, {name: "The HCMI Network"}]
+    journal: "Nature"
+    year: 2026
+    doi: "10.1038/s41586-026-10806-y"
+    notes: "The models and the data are from the Human Cancer Models Initiative (HCMI); dbGaP accession number phs001486."
+  - type: article
+    title: "Maximally selected rank statistics"
+    authors: [{family-names: "Lausen", given-names: "Berthold"}, {family-names: "Schumacher", given-names: "Martin"}]
+    journal: "Biometrics"
+    year: 1992
+    volume: 48
+    start: 73
+    doi: "10.2307/2532740"
+  - type: article
+    title: "On the exact distribution of maximally selected rank statistics"
+    authors: [{family-names: "Hothorn", given-names: "Torsten"}, {family-names: "Lausen", given-names: "Berthold"}]
+    journal: "Computational Statistics & Data Analysis"
+    year: 2003
+    volume: 43
+    start: 121
+    doi: "10.1016/S0167-9473(02)00225-6"

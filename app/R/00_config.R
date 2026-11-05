@@ -1,6 +1,6 @@
 # ---- configuration: labels, palettes, constants -------------------------------------------------------
 APP_TITLE   <- "PDAC Tissue Explorer"
-APP_VERSION <- "0.1.0"
+APP_VERSION <- "0.3.0"
 MIN_CELLS   <- 20L          # a sample contributes to a cell-type summary only with >= this many cells of that type
 BOOT_N      <- 1000L        # bootstrap resamples for confidence intervals of median changes
 PHOSPHO_MIN_PAIRS <- 10L    # a phosphosite is compared only if quantified in tumour and normal tissue of >= this many patients

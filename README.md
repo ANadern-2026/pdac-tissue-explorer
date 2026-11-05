@@ -1,15 +1,16 @@
 # PDAC Tissue Explorer
 
-[![Code DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264879.svg)](https://doi.org/10.5281/zenodo.23264879) [![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264998.svg)](https://doi.org/10.5281/zenodo.23264998)
+[![Code DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264879.svg)](https://doi.org/10.5281/zenodo.23264879) [![Data DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23264997.svg)](https://doi.org/10.5281/zenodo.23264997)
 
-An interactive web app for exploring where any human gene is expressed in pancreatic ductal adenocarcinoma (PDAC) tissue: in tumour versus matched normal tissue, versus healthy pancreas, in which cell types, across tissue states (healthy donor, adjacent normal, primary tumour, liver metastasis, treated tumour) and in published fibroblast and tumour-cell subtypes. It combines three public datasets and needs no programming: type a gene, read the summary, download the figures and the numbers.
+An interactive web app for exploring where any human gene is expressed in pancreatic ductal adenocarcinoma (PDAC) tissue: in tumour versus matched normal tissue, versus healthy pancreas, in which cell types, across tissue states (healthy donor, adjacent normal, primary tumour, liver metastasis, treated tumour) and in published fibroblast and tumour-cell subtypes; how it relates to survival, stage and tumour subtype; and how it behaves in PDAC cell lines and patient-derived organoids. It combines public proteomic, transcriptomic, single-cell, clinical and model-system datasets and needs no programming: type a gene, read the summary, download the figures and the numbers.
 
-**Live app:** <https://pdac.biointeract.space/> · **Code:** [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879) · **Data:** [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
+**Live app:** <https://pdac.biointeract.space/> · **Code:** [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879) · **Data:** [doi:10.5281/zenodo.23264997](https://doi.org/10.5281/zenodo.23264997) · **Author:** Ali Nadernezhad, Leibniz-Institut für Polymerforschung Dresden ([ORCID 0000-0002-3761-1601](https://orcid.org/0000-0002-3761-1601))
 
 ## What you can do
 
 - **Explore a gene.** A plain-language summary, then sample-level views: paired tumour vs adjacent-normal protein, RNA and phosphosites (CPTAC; phosphosites also relative to the protein level), PDAC vs healthy pancreas (TCGA/GTEx), expression by cell type with transcript shares, expression across tissue states per cell type, fibroblast and tumour-cell subtypes, the gene on the atlas map, its clinical context (survival, stage and the classical/basal-like tumour subtype in TCGA-PAAD and CPTAC) and the genes it is co-expressed with within each cell type across tumours. Search by symbol, alias or full name; links to the gene's pages at NCBI Gene, UniProt, the Human Protein Atlas, Open Targets and DepMap.
-- **Compare genes.** Up to 40 genes at once as a cell-type dot heatmap and a tumour-vs-normal forest plot.
+- **Model systems.** For a gene: expression in PDAC cell lines compared with all other cancer cell lines, CRISPR knockout effect (dependency), expression against each line's classical/basal-like character, protein where measured; expression in patient-derived organoids by collection, and whether organoids keep the level of the tumour they came from. An overview page shows how closely each cell line and organoid resembles tumour cells of patients. Cell lines and organoids are kept apart and compared only within one technology.
+- **Compare genes.** Up to 40 genes at once as a cell-type dot heatmap, a tumour-vs-normal forest plot and model-system medians with dependency.
 - **Gene sets & survival.** Survival of patients grouped by up to six genes, each high or low as chosen: by the number of genes in the chosen direction, all vs fewer, or a combined score; filters for stage, sex, age and resection margin; the same definition checked in the other cohort.
 - **Download.** Every figure as PDF/PNG and the underlying per-sample values as CSV.
 
@@ -21,17 +22,19 @@ An interactive web app for exploring where any human gene is expressed in pancre
 | TCGA Pan-Cancer Clinical Data Resource | Overall survival and progression-free interval, stage, age for the TCGA-PAAD tumours | Liu J. et al., *Cell* 2018;173:400 |
 | TCGA-PAAD + GTEx pancreas (recount3) | Bulk RNA: 147 PDAC (ductal histology), 4 adjacent normal, 330 healthy pancreas | Wilks C. et al., *Genome Biol* 2021;22:323; TCGA, *Cancer Cell* 2017; GTEx, *Science* 2020 |
 | PDAC single-cell atlas | ~620,000 cells, 234 samples from 12 studies, with published cell-type, tumour-cell and fibroblast subclusters | Loveless I.M. et al., *Clin Cancer Res* 2025;31:756 (Zenodo 10.5281/zenodo.14199536) |
+| DepMap Public 26Q3 (Broad Institute, CC BY 4.0) | RNA of all 2,130 cancer models, genome-wide CRISPR knockout effects (Chronos), harmonised CCLE proteomics; 98 PDAC models with RNA | DepMap, Broad (2026), DepMap Public 26Q3; Tsherniak A. et al., *Cell* 2017;170:564; Nusinow D.P. et al., *Cell* 2020;180:387 |
+| PDAC organoids (GDC: ORGANOID-PANCREATIC, HCMI-CMDC) | RNA of 38 tumour and 11 normal organoids (Tiriac) and 69 HCMI organoids, 42 with their sequenced source tumour | Tiriac H. et al., *Cancer Discov* 2018;8:1112; ElHarouni D. et al. (HCMI), *Nature* 2026, doi:10.1038/s41586-026-10806-y |
 
 Please cite this resource together with the original data sources (see `CITATION.cff`):
 
-> Nadernezhad A. PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue. Zenodo. doi:10.5281/zenodo.23264879 (software); processed data: doi:10.5281/zenodo.23264998.
+> Nadernezhad A. PDAC Tissue Explorer: an interactive resource for gene expression in pancreatic ductal adenocarcinoma tissue. Zenodo. doi:10.5281/zenodo.23264879 (software); processed data: doi:10.5281/zenodo.23264997.
 
 ## Repository layout
 
 ```
 app/                 Shiny app (app.R, R/ modules, www/ styles and About page)
 app/data/            prepared data (not in Git; get_data.R or data-raw/): gene index + on-disk store (*.sqlite)
-get_data.R           downloads the prepared data files from Zenodo (checksum-verified) and builds the data store
+get_data.R           downloads the app's data store from Zenodo (checksum-verified)
 data-raw/            data preparation, run in order:
   00_scatlas_readiness.R   filtering of the published atlas object (cycling cells, ambient-RNA outliers)
   01_scatlas_summaries.R   per-sample x cell-type summaries, atlas map subsample
@@ -43,6 +46,8 @@ data-raw/            data preparation, run in order:
   04_gene_index.R          searchable gene index, symbol reconciliation across datasets
   04b_gene_xrefs.R         Ensembl IDs and gene types for the links to other resources
   05_build_store.R         on-disk data store: one SQLite file per dataset, one compressed record per gene
+  06a_fetch_models.R       downloads the DepMap and GDC (organoid) files for 06
+  06_models.R              model systems: cell lines and organoids, dependency, subtype character, resemblance to patient tumour cells
   logs/                    provenance logs (input checksums, counts, session info)
 tests/               testthat tests: pipeline on a miniature atlas, data store, app statistics;
                      regression-v01.R compares every output of the data store with the v0.1 in-memory data
@@ -56,7 +61,7 @@ deploy/server/                  self-hosting on a server: Docker Compose + Caddy
 Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `survival`, `maxstat`, `markdown`, `patchwork`, `scales`.
 
 ```r
-source("get_data.R")    # downloads the prepared data (~245 MB) from Zenodo into app/data/ and builds the data store
+source("get_data.R")    # downloads the data store (~640 MB) from Zenodo into app/data/
 shiny::runApp("app")
 ```
 
@@ -75,13 +80,15 @@ source("data-raw/01_scatlas_summaries.R")   # ~ 1 h, ~50 GB RAM; set the paths a
 source("data-raw/04_gene_index.R")
 source("data-raw/04b_gene_xrefs.R")         # identifiers for the links to other resources
 source("data-raw/01b_sc_coexpression.R")    # ~15 min; co-expression partners per cell type
+source("data-raw/06a_fetch_models.R")       # DepMap + GDC organoid files (DepMap file index saved by hand, see data-raw/README.md)
+source("data-raw/06_models.R")             # ~3 min, ~8 GB RAM
 source("data-raw/05_build_store.R")         # converts the tables into the app's on-disk data store
 testthat::test_dir("tests/testthat")
 ```
 
 ## Methods, limitations and interpretation
 
-See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); survival associations are exploratory (Kaplan–Meier at the median or at a data-driven cut-off with a p-value corrected for the search and checked in the other cohort, spline and continuous Cox models); co-expression is a study-adjusted Spearman correlation across tumour samples within one cell type; p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
+See the app's **About** page (`app/www/about.md`). In short: tumour–normal comparisons are paired within patients (Wilcoxon signed-rank, bootstrap CI); single-cell summaries are per sample (≥ 20 cells of a type) with the library as replication unit; TCGA vs GTEx differences are descriptive (no cross-study batch correction); survival associations are exploratory (Kaplan–Meier at the median or at a data-driven cut-off with a p-value corrected for the search and checked in the other cohort, spline and continuous Cox models); co-expression is a study-adjusted Spearman correlation across tumour samples within one cell type; model systems are compared with each other only within one technology (cell lines with cell lines, organoids within their collection), and their resemblance to patients is measured against tumour cells of the single-cell atlas; p-values are unadjusted (phosphosites: false discovery rate across the sites of the selected gene). Abundance does not show activity or function, adjacent "normal" pancreas is not healthy tissue, and in the atlas tissue state is partly confounded with study.
 
 ## Licence
 
@@ -89,4 +96,4 @@ Code: MIT (`LICENSE`). Derived data tables: CC BY 4.0, consistent with the sourc
 
 ## Acknowledgements and AI assistance
 
-This resource builds entirely on the generosity of the CPTAC, TCGA, GTEx and recount3 teams and the authors of the twelve single-cell studies and of the integrated atlas. Code was drafted with the assistance of an AI model (Anthropic Claude); all data processing was executed, checked and curated by the author.
+This resource builds entirely on the generosity of the CPTAC, TCGA, GTEx, recount3 and DepMap teams, the authors of the twelve single-cell studies and of the integrated atlas, and the organoid collections. The models and the data are from the Human Cancer Models Initiative (HCMI); dbGaP accession number phs001486. Code was drafted with the assistance of an AI model (Anthropic Claude); all data processing was executed, checked and curated by the author.

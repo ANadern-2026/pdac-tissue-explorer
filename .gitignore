@@ -1,5 +1,6 @@
 # prepared data and raw downloads are distributed via Zenodo, not Git
 app/data/
+app/data_*/
 data-raw/source/
 # private development material (not part of the public project)
 dev/

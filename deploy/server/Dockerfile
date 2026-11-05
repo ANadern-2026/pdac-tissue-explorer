@@ -2,7 +2,7 @@
 # Works on x86_64 and ARM64 servers: R and all packages come as prebuilt Ubuntu 24.04 packages
 # (R 4.3.3, shiny 1.8, ggplot2 3.4, plotly 4.10), so nothing is compiled during the build.
 # Build context is the repository root. Data files are not baked in; they live in a Docker volume
-# filled once with get_data.R, which downloads the prepared tables and builds the on-disk data store (see README.md).
+# filled once with get_data.R, which downloads the on-disk data store from Zenodo (see README.md).
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 TZ=Etc/UTC

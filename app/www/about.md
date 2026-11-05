@@ -2,7 +2,7 @@
 
 ## What this is
 
-The **PDAC Tissue Explorer** shows where a gene is expressed in human pancreatic ductal adenocarcinoma (PDAC) and how its expression differs between tumour and non-tumour pancreas, using three public datasets. It is meant for researchers and clinicians who want a quick, sample-level view without writing code. All figures and the underlying numbers can be downloaded.
+The **PDAC Tissue Explorer** shows where a gene is expressed in human pancreatic ductal adenocarcinoma (PDAC) and how its expression differs between tumour and non-tumour pancreas, how it relates to survival, stage and tumour subtype, and how it behaves in PDAC cell lines and organoids, using public datasets. It is meant for researchers and clinicians who want a quick, sample-level view without writing code. All figures and the underlying numbers can be downloaded.
 
 ## Data
 
@@ -48,7 +48,7 @@ The **PDAC Tissue Explorer** shows where a gene is expressed in human pancreatic
 
 ## How to cite
 
-If you use this resource, please cite it — Nadernezhad A., *PDAC Tissue Explorer*, Zenodo, [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879); processed data [doi:10.5281/zenodo.23264998](https://doi.org/10.5281/zenodo.23264998) — **and the original data sources**: Cao et al., *Cell* 2021; Wilks et al., *Genome Biol* 2021 (recount3); Liu et al., *Cell* 2018 (TCGA-CDR); Moffitt et al., *Nat Genet* 2015 (subtype genes); Hothorn & Lausen, *Comput Stat Data Anal* 2003 (maxstat); The Cancer Genome Atlas Research Network, *Cancer Cell* 2017; the GTEx Consortium, *Science* 2020; Loveless et al., *Clin Cancer Res* 2025, and the twelve single-cell studies it integrates.
+If you use this resource, please cite it — Nadernezhad A., *PDAC Tissue Explorer*, Zenodo, [doi:10.5281/zenodo.23264879](https://doi.org/10.5281/zenodo.23264879); processed data [doi:10.5281/zenodo.23264997](https://doi.org/10.5281/zenodo.23264997) — **and the original data sources**: Cao et al., *Cell* 2021; Wilks et al., *Genome Biol* 2021 (recount3); Liu et al., *Cell* 2018 (TCGA-CDR); Moffitt et al., *Nat Genet* 2015 (subtype genes); Hothorn & Lausen, *Comput Stat Data Anal* 2003 (maxstat); The Cancer Genome Atlas Research Network, *Cancer Cell* 2017; the GTEx Consortium, *Science* 2020; Loveless et al., *Clin Cancer Res* 2025, and the twelve single-cell studies it integrates; for model systems DepMap, Broad (2026), DepMap Public 26Q3 and Tsherniak et al., *Cell* 2017; Nusinow et al., *Cell* 2020 (proteomics); Tiriac et al., *Cancer Discov* 2018; ElHarouni et al., *Nature* 2026 (HCMI). The models and the data are from the Human Cancer Models Initiative (HCMI); dbGaP accession number phs001486.
 
 ## Author
 
