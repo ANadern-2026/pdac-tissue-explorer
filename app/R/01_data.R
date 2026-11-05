@@ -10,7 +10,7 @@ suppressPackageStartupMessages({ library(DBI); library(RSQLite) })
 STORE_FORMAT  <- 1L      # bump when the on-disk layout changes (05_build_store.R writes the same constant)
 STORE_INFO_CODEC <- "rds-gzip"
 STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite", phospho = "phospho.sqlite",
-                   clinical = "clinical.sqlite", coexp = "coexp.sqlite")      # all but cptac and bulk are optional
+                   clinical = "clinical.sqlite", coexp = "coexp.sqlite", models = "models.sqlite")      # all but cptac and bulk are optional
 STORE_CACHE_MB <- 64     # memory budget of the per-gene record cache (shared by all sessions)
 
 # ---- record codecs (encoders are in data-raw/05_build_store.R) ----
@@ -129,11 +129,16 @@ load_app_data <- function(dir = DATA_DIR) {
     d$coexp_units <- stats::setNames(lapply(d$coexp_cells$compartment, function(cc) coexp_units(d$sc_groups, cc)), d$coexp_cells$compartment)
     d$sc_symbol <- stats::setNames(d$genes$symbol[!is.na(d$genes$sym_sc)], d$genes$sym_sc[!is.na(d$genes$sym_sc)])   # sc symbol -> index symbol
   }
+  d$has_models <- file.exists(f(STORE_LAYERS[["models"]]))
+  if (d$has_models) {
+    d$models <- store_open(f(STORE_LAYERS[["models"]]))
+    d$model_info <- d$models$info[intersect(c("models", "tissue_units", "crispr_lines", "protein_lines", "rna_lines", "similarity", "hcmi_pairs", "moffitt_genes", "n_universe", "source"), names(d$models$info))]
+  }
   d$choices <- stats::setNames(d$genes$symbol, ifelse(is.na(d$genes$name), d$genes$symbol, paste0(d$genes$symbol, " - ", d$genes$name)))
   d
 }
 
-close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho", "coexp")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
+close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho", "coexp", "models")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
 
 compartment_of <- function(cell_type, fine_group) {
   key <- ifelse(cell_type == "DUCTAL", ifelse(fine_group %in% names(DUCTAL_GROUP), "TUMOUR_DUCTAL", "OTHER_DUCTAL"), cell_type)
@@ -245,6 +250,24 @@ sc_aggregate <- function(v, by) {
   a <- stats::aggregate(cbind(n_cells, w_mean, w_frac) ~ ., data = v[, c(by, "n_cells", "w_mean", "w_frac")], FUN = sum)
   a$mean_cp10k <- a$w_mean / a$n_cells; a$frac <- a$w_frac / a$n_cells; a$avg_expr <- log1p(a$mean_cp10k)
   a[, c(by, "n_cells", "mean_cp10k", "avg_expr", "frac")]
+}
+
+# ---- model systems (models.sqlite, data-raw/06) ----
+# One gene in the models and in patient tissue: rna = models table + log2tpm + pct (within-sample percentile 0-100, NA outside the
+# universe); tissue = tissue units + pct; crispr = all screened lines + effect; protein = proteomics lines + value; lines = RNA of all
+# DepMap lines (every lineage); pairs = HCMI organoids and their source tumours. NULL parts if unmeasured.
+model_values <- function(d, symbol) {
+  if (!isTRUE(d$has_models) || length(symbol) != 1L || is.na(symbol)) return(NULL)
+  mi <- d$model_info; out <- list()
+  r <- store_get(d$models, "rna", symbol)
+  if (!is.null(r)) out$rna <- data.frame(mi$models, log2tpm = r$log2tpm_x1000 / 1000, pct = if (is.null(r$pct_x10)) NA_real_ else r$pct_x10 / 10, stringsAsFactors = FALSE)
+  t <- store_get(d$models, "tissue", symbol); if (!is.null(t)) out$tissue <- data.frame(mi$tissue_units, pct = t / 10, stringsAsFactors = FALSE)
+  k <- store_get(d$models, "crispr", symbol); if (!is.null(k)) out$crispr <- data.frame(mi$crispr_lines, effect = k / 1000, stringsAsFactors = FALSE)
+  p <- store_get(d$models, "protein", symbol); if (!is.null(p)) out$protein <- data.frame(mi$protein_lines, value = p / 1000, stringsAsFactors = FALSE)
+  if ("rna_lines" %in% names(d$models$tables)) { l <- store_get(d$models, "rna_lines", symbol); if (!is.null(l)) out$lines <- data.frame(mi$rna_lines, log2tpm = l / 1000, stringsAsFactors = FALSE) }
+  if ("pairs" %in% names(d$models$tables)) { q <- store_get(d$models, "pairs", symbol)
+    if (!is.null(q)) out$pairs <- data.frame(mi$hcmi_pairs[, c("model", "case", "tumour")], organoid_log2tpm = q$organoid / 1000, tumour_log2tpm = q$tumour / 1000, stringsAsFactors = FALSE) }
+  if (!length(out)) NULL else out
 }
 
 # ---- clinical context (clinical.sqlite, data-raw/03b) ----

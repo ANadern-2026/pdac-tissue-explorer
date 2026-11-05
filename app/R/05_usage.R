@@ -130,7 +130,8 @@ usage_read <- function(days = NULL) {
 USAGE_DL_NAMES <- c(cptac = "Tumour vs normal (CPTAC)", bulk = "Tumour vs normal (TCGA/GTEx)", phospho = "Phosphosites", surv = "Survival",
                     stage = "Stage", moffitt = "Classical/basal", ct = "Cell types", states = "Tissue states", fibro = "Fibroblast subtypes",
                     ductal = "Tumour-cell states", coexp = "Co-expression", umap = "Atlas map", sets = "Gene sets & survival",
-                    mdot = "Compare: cell types", mforest = "Compare: tumour vs normal")
+                    mdot = "Compare: cell types", mforest = "Compare: tumour vs normal", models = "Model systems (gene)", fid = "Model overview",
+                    mmodels = "Compare: model systems")
 
 usage_kpis <- function(u) {
   v <- u$visits; e <- u$events
@@ -172,7 +173,7 @@ usage_tables <- function(u) {
     referrers = usage_count(v$referrer, "Came from", total = n),
     tags = usage_count(v$tag[!is.na(v$tag)], "Link tag (?ref=)", total = n),
     devices = usage_count(ifelse(is.na(v$device), "unknown", v$device), "Screen", total = n),
-    pages = usage_count(unname(c(gene = "Explore a gene", multi = "Compare genes", sets = "Gene sets & survival", about = "About")[first("page")$value]) |> (\(x) x[!is.na(x)])(),
+    pages = usage_count(unname(c(gene = "Explore a gene", multi = "Compare genes", sets = "Gene sets & survival", models = "Model systems", about = "About")[first("page")$value]) |> (\(x) x[!is.na(x)])(),
                         "Page opened (visits)", total = n),
     tabs = usage_count(first("tab")$value, "Gene tab opened (visits)", total = n),
     genes = usage_count(first("gene")$value, "Gene", n = 100),

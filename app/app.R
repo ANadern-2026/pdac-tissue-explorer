@@ -36,7 +36,7 @@ theme_app <- bs_theme(version = 5, bg = "#fcfcfb", fg = "#0b0b0b", primary = "#2
                       base_font = font_collection("Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
                       "navbar-bg" = "#ffffff", "card-border-color" = "#e9e8e4")
 
-to_plotly <- function(p, height = NULL, wrap = NULL) {      # wrap: max characters per subtitle line (plots in narrow columns)
+to_plotly <- function(p, height = NULL, wrap = NULL, colorbar = "Relative<br>expression") {      # wrap: max characters per subtitle line (plots in narrow columns)
   ttl <- p$labels$title; sub <- p$labels$subtitle
   if (!is.null(sub) && !is.null(wrap)) sub <- paste(unlist(lapply(strsplit(sub, "\n", fixed = TRUE)[[1]], strwrap, width = wrap)), collapse = "\n"); faceted <- !inherits(p$facet, "FacetNull")
   p$labels$title <- NULL; p$labels$subtitle <- NULL; p$labels$caption <- NULL
@@ -45,7 +45,7 @@ to_plotly <- function(p, height = NULL, wrap = NULL) {      # wrap: max characte
   for (i in seq_along(out$x$data)) {
     if (identical(out$x$data[[i]]$type, "box")) { out$x$data[[i]]$marker$opacity <- 0; out$x$data[[i]]$hoverinfo <- "none" }   # hidden outliers
     if (!is.null(out$x$data[[i]]$marker$colorbar)) out$x$data[[i]]$marker$colorbar <- modifyList(out$x$data[[i]]$marker$colorbar,
-      list(len = 0.85, lenmode = "fraction", y = 0.5, yanchor = "middle", thickness = 14, title = list(text = "Relative<br>expression")))
+      list(len = 0.85, lenmode = "fraction", y = 0.5, yanchor = "middle", thickness = 14, title = list(text = colorbar)))
   }
   # multi-line subtitles ("\n") and two-line facet labels get more room; single-line layouts are unchanged
   sub_lines <- if (is.null(sub)) 0L else length(strsplit(sub, "\n", fixed = TRUE)[[1]])
@@ -66,6 +66,9 @@ fig_downloads <- function(id) div(class = "dl-row", downloadButton(paste0(id, "_
                                   downloadButton(paste0(id, "_png"), "Figure (PNG)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_csv"), "Data (CSV)", class = "btn-sm btn-outline-secondary"))
 note <- function(...) p(class = "note", ...)
+values_table <- function(label, ...) tags$details(class = "how how-table", tags$summary(label), div(class = "how-body", ...))   # per-sample tables, collapsed under their figures
+how_to <- function(..., label = "How to read this") tags$details(class = "how", tags$summary(label), div(class = "how-body", ...))
+q_head <- function(title, sub = NULL) div(class = "q-head", h4(title), if (!is.null(sub)) p(class = "q-sub", sub))
 strip <- function(..., label = "View settings") div(class = "settings-strip", div(class = "strip-label", label), div(class = "strip-controls", ...))
 # Data-tab tables: DataTables' own style (style = "default") - the Ubuntu r-cran-dt package used on the server lacks the
 # Bootstrap 5 styles that DT would otherwise pick for a bslib page, which left the buttons unstyled. CSV file name: Buttons >= 1.2 reads `filename`, the server's Buttons 1.0.3 reads `title`.
@@ -74,7 +77,8 @@ dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", forma
 # ---- UI ------------------------------------------------------------------------------------------------------
 ui <- page_navbar(
   title = span(APP_TITLE, span(class = "badge-version", paste0("v", APP_VERSION))), theme = theme_app, id = "nav", fillable = FALSE,
-  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE), if (USAGE_ON) usage_js()),
+  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE), if (USAGE_ON) usage_js(),
+                             tags$script(HTML("document.addEventListener('toggle', function(e) { if (e.target.tagName === 'DETAILS' && e.target.open && window.jQuery && $.fn.dataTable) $($.fn.dataTable.tables(true)).DataTable().columns.adjust(); }, true);"))),
                    if (length(MOVED_TO)) div(class = "moved-banner", strong("This app has moved: "),
                                              a(href = MOVED_TO[1], target = "_top", sub("/$", "", sub("^https?://", "", MOVED_TO[1]))),
                                              if (length(MOVED_TO) > 1) span(" ", MOVED_TO[2]))),
@@ -92,18 +96,20 @@ ui <- page_navbar(
                 fig_downloads("dl_cptac")),
             div(plotlyOutput("p_bulk", height = "460px"), fig_downloads("dl_bulk"))),
           note("CPTAC: Cao et al., Cell 2021 (135 PDAC tumours; 64 protein and 19 RNA tumour/adjacent-normal pairs). TCGA/GTEx via recount3. ",
-               "Adjacent normal tissue from pancreatic-cancer surgery is fibrotic and inflamed; it is not healthy pancreas.")),
+               "Adjacent normal tissue from pancreatic-cancer surgery is fibrotic and inflamed; it is not healthy pancreas."),
+          values_table("CPTAC values per patient (tumour and matched adjacent normal; table and copy/CSV)", DTOutput("t_cptac", fill = FALSE))),
         if (isTRUE(D$has_phospho)) nav_panel("Phosphosites",
           strip(radioButtons("ph_mode", "Values", inline = TRUE, choices = c("Site abundance" = "raw", "Relative to the protein level" = "rel"))),
           layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
             plotlyOutput("p_phsites", height = "auto"),
             conditionalPanel("output.ph_has", uiOutput("ph_site_ui"),
               layout_columns(col_widths = breakpoints(sm = 12, md = c(6, 6)), plotlyOutput("p_phsite", height = "440px"), plotlyOutput("p_phsite_rel", height = "440px")))),
-          fig_downloads("dl_phospho"), conditionalPanel("output.ph_has", hr(), DTOutput("t_phospho", fill = FALSE)),
+          fig_downloads("dl_phospho"),
           note("CPTAC phosphoproteome (Cao et al., Cell 2021): phosphosite intensities in tumours and matched adjacent normal tissue of the same patients. ",
                "A site is compared only if quantified in both tissues of at least ", PHOSPHO_MIN_PAIRS, " patients (paired Wilcoxon test; false discovery rate across the sites of this gene). ",
                "'Relative to the protein level' subtracts the gene's protein level in the same sample, separating a change in phosphorylation from a change in the amount of protein. ",
-               "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity.")),
+               "Positions refer to the RefSeq protein given in the table; a change in phosphosite abundance does not by itself show a change in activity."),
+          conditionalPanel("output.ph_has", values_table("Phosphosite results per site (table and copy/CSV)", DTOutput("t_phospho", fill = FALSE)))),
         if (isTRUE(D$has_clinical)) nav_panel("Clinical context",
           strip(radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES),
                 radioButtons("surv_cut", "Split patients at", inline = TRUE, choices = CUT_CHOICES)),
@@ -128,7 +134,8 @@ ui <- page_navbar(
             plotlyOutput("p_ct", height = "580px"), div(plotlyOutput("p_share", height = "290px"), plotlyOutput("p_frac", height = "290px"))),
           fig_downloads("dl_ct"),
           note("Each dot is one tissue sample; a sample contributes to a cell type only if it has at least ", MIN_CELLS, " cells of that type. Average expression = log1p of the mean normalised expression (CP10k) of all cells of that type in a sample. ",
-               "'Ductal: tumour subclusters' are ductal cells assigned to the atlas's malignant subclusters; 'Ductal: other' are remaining ductal cells, mostly non-malignant duct.")),
+               "'Ductal: tumour subclusters' are ductal cells assigned to the atlas's malignant subclusters; 'Ductal: other' are remaining ductal cells, mostly non-malignant duct."),
+          values_table("Single-cell values per sample and cell group, all tissue states (table and copy/CSV)", DTOutput("t_sc", fill = FALSE))),
         nav_panel("Tissue states",
           strip(checkboxGroupInput("compartments", "Cell types shown", choices = CELLTYPE_ORDER, inline = TRUE,
                                    selected = c("Fibroblasts", "Ductal: tumour subclusters", "Ductal: other", "Endothelial cells", "Myeloid cells", "T and NK cells"))),
@@ -151,13 +158,36 @@ ui <- page_navbar(
                "FDR = false discovery rate across all genes analysed in that cell type. Click a gene in the table to open it. ",
                "Co-expression can reflect shared regulation, a shared cell state or a changing mix of subtypes within the cell type; it does not show that the proteins interact. ",
                "Transcripts typical of another cell type (for example tumour keratins in immune cells) can come from ambient RNA; their co-expression then mostly tracks that contamination.")),
+        if (isTRUE(D$has_models)) nav_panel("Model systems",
+          uiOutput("models_cards"),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)), gap = "2.5rem",
+            div(div(class = "sec-head", h3("PDAC cell lines"), p("2D lines from DepMap: the models most labs buy and use. One sequencing and processing pipeline for all lines, so they can be compared with each other and with other cancer types.")),
+                q_head("How much do PDAC cell lines express it?"), plotlyOutput("p_mlines", height = "340px"),
+                q_head("Do PDAC cells need it to grow?"), plotlyOutput("p_mdep", height = "380px"),
+                how_to(p("RNA: log2(TPM + 1), DepMap Public 26Q3, for every PDAC line and, for comparison, every other cancer cell line in DepMap."),
+                       p("Knockout: DepMap's gene effect (Chronos) from genome-wide CRISPR screens; 0 = no effect on growth, -1 = the typical effect of knocking out a gene every cell needs; ",
+                         "below ", DEP_STRONG, " counts as a clear effect here. A knockout effect in culture does not show that a drug against the protein would work in patients.")),
+                q_head("Does it differ between classical-like and basal-like lines?"), plotlyOutput("p_mlsub", height = "420px"),
+                uiOutput("mprot_box"),
+                how_to(p("Subtype score of each line relative to the other PDAC cell lines: mean z-score of the 25 basal-like minus the 25 classical genes of Moffitt et al. 2015, ",
+                         "computed among the PDAC cell lines only. 2D lines lean basal-like in general, so 'more classical' means classical relative to other lines."),
+                       p("Protein (if measured): mass spectrometry of cell lines (CCLE proteomics, Nusinow et al. 2020), relative between lines."))),
+            div(div(class = "sec-head", h3("Patient-derived organoids"), p("3D cultures grown from patients' tumours (DepMap, HCMI, Tiriac et al. 2018), used to study patient-like tumour cells. Each collection was sequenced and processed in its own way: compare organoids within a collection.")),
+                q_head("How much do the organoids express it?"), plotlyOutput("p_morg", height = "420px"),
+                q_head("Do organoids keep the differences between patients?"), plotlyOutput("p_mpairs", height = "460px"),
+                how_to(p("42 HCMI patients whose organoid and source tumour were both RNA-sequenced in the same pipeline. If patients whose tumour expresses more of the gene also have organoids with more, ",
+                         "the organoids preserve this patient-to-patient difference. Tumour tissue also contains stroma and immune cells; for genes of those cells, no agreement is expected.")))),
+          div(class = "sec-head", h3("In patients (background)")),
+          plotlyOutput("p_mtissue", height = "480px"),
+          how_to(p("Where patients' cells rank the gene among all genes of the sample in the single-cell atlas (Loveless et al. 2025; treatment-naive primary tumours, one dot per tumour and cell type, at least ",
+                   MIN_CELLS, " cells). This shows which cells make the gene in patients; see the 'Cell types' tab for details. It is not put on one scale with the models: single-cell averages and cultured cells ",
+                   "differ in technology (single-cell data miss many low-abundance transcripts) and in composition.")),
+          tags$details(class = "how how-table", tags$summary("All models: values for this gene (table and downloads)"),
+                       div(class = "how-body", fig_downloads("dl_models"), DTOutput("t_models", fill = FALSE)))),
         nav_panel("Atlas map",
           layout_columns(col_widths = c(6, 6), plotlyOutput("p_umap", height = "560px"), plotlyOutput("p_umap_ct", height = "560px")),
           fig_downloads("dl_umap"),
           note("A stratified subsample of atlas cells, positioned by the published atlas UMAP. Grey = not detected.")),
-        nav_panel("Data",
-          note("Per-sample single-cell values for the selected gene (all tissue states). Use the buttons to copy or download."),
-          DTOutput("t_sc", fill = FALSE), hr(), note("CPTAC matched tumour/normal values."), DTOutput("t_cptac", fill = FALSE))
       )),
   nav_panel("Compare genes", value = "multi",
     layout_sidebar(
@@ -166,7 +196,8 @@ ui <- page_navbar(
         div(class = "examples", span("Examples: "), lapply(seq_along(EXAMPLE_LISTS), function(i) actionLink(paste0("exl_", i), names(EXAMPLE_LISTS)[i]))),
         actionButton("go_multi", "Compare", class = "btn-primary w-100"), uiOutput("multi_msg")),
       card(card_header("Cell types"), plotlyOutput("p_mdot", height = "auto"), fig_downloads("dl_mdot")),
-      card(card_header("Tumour vs normal"), plotlyOutput("p_mforest", height = "auto"), fig_downloads("dl_mforest")))),
+      card(card_header("Tumour vs normal"), plotlyOutput("p_mforest", height = "auto"), fig_downloads("dl_mforest")),
+      if (isTRUE(D$has_models)) card(card_header("Model systems"), plotlyOutput("p_mmodels", height = "auto"), plotlyOutput("p_mmdep", height = "auto"), fig_downloads("dl_mmodels")))),
   if (isTRUE(D$has_clinical)) nav_panel("Gene sets & survival", value = "sets",
     div(class = "gene-band set-band",
       div(class = "gene-search",
@@ -203,6 +234,31 @@ ui <- page_navbar(
          "The plot below shows the same definition in the other, independent cohort (overall survival); a pattern that holds in both is more credible. ",
          "Filters reduce the number of patients quickly: both cohorts are mostly resected tumours of stage I-II (TCGA-PAAD: 3 stage III and 3 stage IV; CPTAC: 39 stage III, 9 stage IV). ",
          "These are exploratory, observational associations; with many combinations tried, some will reach p < 0.05 by chance.")),
+  if (isTRUE(D$has_models)) nav_panel("Model systems", value = "models",
+    div(class = "page-intro", h3("PDAC model systems"),
+        p("Cell lines and patient-derived organoids serve different purposes, so they are shown separately. Resemblance always refers to one stated reference: ",
+          "the average RNA of tumour cells in treatment-naive primary PDAC (single-cell atlas). For a single gene, open its page and the tab 'Model systems'.")),
+    uiOutput("models_overview_cards"),
+    div(class = "sec-head", h3("PDAC cell lines")),
+    plotlyOutput("p_fid_lines", height = "520px"),
+    how_to(p("Resemblance: Spearman correlation between a line's RNA (DepMap, bulk RNA-seq) and the reference (single-cell RNA) over the 2,000 genes that best tell atlas cell types apart. ",
+             "Because the technologies differ, the values are high for every model and only the order within one type is informative; use it for orientation, not as a ranking to choose a model from. ",
+             "A reference built from liver-metastasis tumour cells orders the models in the same way (rho 0.95-0.99), also for lines derived from metastases, so it is not shown separately."),
+           p("Subtype: relative to the other PDAC cell lines (Moffitt et al. 2015 genes); 'more classical' and 'more basal-like' are the lower and upper thirds.")),
+    DTOutput("t_lines", fill = FALSE),
+    div(class = "sec-head", h3("Patient-derived organoids")),
+    layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
+      div(q_head("Do organoids keep their own patient's features?", "HCMI organoids compared with their own source tumour (y) and with the other patients' tumours (x)."),
+          plotlyOutput("p_hcmi", height = "480px"),
+          how_to(p("Organoid and tumour were sequenced in the same pipeline. Tumour tissue contains stroma and immune cells that organoids lack, so each gene is centred within the organoids and within the tumours, ",
+                   "over the 2,000 genes that vary most between organoids. Dots above the dashed line resemble their own tumour more than the others."))),
+      div(q_head("How do organoids differ within each collection?"), plotlyOutput("p_fid_org", height = "480px"),
+          how_to(p("Same resemblance score and reference as for the cell lines; subtype relative to the other organoids of the same collection. Collections were processed differently, so compare within a panel.")))),
+    DTOutput("t_org", fill = FALSE),
+    fig_downloads("dl_fid"),
+    note("Models: DepMap Public 26Q3 (Broad Institute, CC BY 4.0) and GDC ORGANOID-PANCREATIC (Tiriac et al., Cancer Discov 2018). ",
+         "The models and the data are from the Human Cancer Models Initiative (HCMI) https://ocg.cancer.gov/programs/HCMI; dbGaP accession number phs001486. ",
+         "These are RNA summaries only; growth, drug response and genetics also matter when choosing a model.")),
   nav_panel("About", value = "about", includeMarkdown("www/about.md")),
   nav_spacer(),
   nav_item(tags$a(href = REPO_URL, target = "_blank", "Source code"))
@@ -276,6 +332,7 @@ server <- function(input, output, session) {
   km_other <- reactive({ q <- other_q(); if (is.na(q)) NULL else transfer_split(other_x(), q) })
   in_moffitt <- reactive({ g <- gene(); g %in% MOFFITT_GENES })
   cx <- reactive(coexp_partners(D, gene()))
+  mv <- reactive(model_values(D, gene()))
   cx_default <- reactive({ x <- cx(); if (is.null(x)) return(NULL); have <- unique(as.character(x$compartment))
     s <- cs_naive(); if (!is.null(s)) { sm <- s$summary[!is.na(s$summary$share), ]; o <- as.character(sm$compartment[order(-sm$share)]); o <- o[o %in% have]; if (length(o)) return(o[1]) }
     have[1] })
@@ -306,7 +363,11 @@ server <- function(input, output, session) {
     stage = reactive(plot_stage(cv(), cl_assoc(), gene())), moffitt = reactive(plot_moffitt(cv(), cl_assoc(), gene(), in_moffitt())),
     coexp = reactive(if (is.null(cx())) empty_plot(paste0(gene(), ": not analysed in any cell type (not in the single-cell data or expressed in too few cells)")) else plot_coexp(cx_tab(), gene(), cx_cell(), cx_info())),
     coexp_pair = reactive(if (is.null(cx())) empty_plot("") else plot_coexp_pair(cx_pair(), gene(), cx_partner(), cx_cell())),
-    phsite_rel = reactive(if (isTRUE(ph()$has_protein)) plot_cptac_paired(ph_site_pairs(TRUE), gene(), "phosphosite") else empty_plot("Protein not quantified")))
+    phsite_rel = reactive(if (isTRUE(ph()$has_protein)) plot_cptac_paired(ph_site_pairs(TRUE), gene(), "phosphosite") else empty_plot("Protein not quantified")),
+    mlines = reactive(plot_line_expression(mv(), gene())), mdep = reactive(plot_dependency(mv()$crispr, gene())),
+    mlsub = reactive(plot_line_subtype(mv(), gene())), mprot = reactive(plot_model_protein(mv()$protein, gene())),
+    morg = reactive(plot_organoid_expression(mv(), gene())), mpairs = reactive(plot_hcmi_gene_pairs(mv(), gene())),
+    mtissue = reactive(plot_tissue_background(mv(), gene(), D$model_info$n_universe)))
 
   output$gene_header <- renderUI({
     gr <- gene_row(D, gene())
@@ -316,7 +377,8 @@ server <- function(input, output, session) {
         if (nzchar(gr$aliases)) p(class = "aliases", "Also known as: ", gr$aliases),
         div(chip("Protein (CPTAC)", !is.na(gr$sym_cptac_protein)), chip("RNA (CPTAC)", !is.na(gr$sym_cptac_rna)),
             if (isTRUE(D$has_phospho)) chip("Phosphosites (CPTAC)", gr$symbol %in% D$phospho_map$symbol),
-            chip("RNA (TCGA/GTEx)", !is.na(gr$sym_tcga_gtex)), chip("Single-cell atlas", !is.na(gr$sym_sc) && isTRUE(D$has_sc))),
+            chip("RNA (TCGA/GTEx)", !is.na(gr$sym_tcga_gtex)), chip("Single-cell atlas", !is.na(gr$sym_sc) && isTRUE(D$has_sc)),
+            if (isTRUE(D$has_models)) chip("Models (DepMap, organoids)", !is.null(mv()))),
         div(class = "links-out", span(class = "links-label", "Elsewhere:"),
             lapply(gene_links(gr), function(l) tags$a(href = l$url, target = "_blank", rel = "noopener noreferrer", title = l$hint, class = "link-out", l$label))))
   })
@@ -328,6 +390,7 @@ server <- function(input, output, session) {
                   if (isTRUE(D$has_clinical)) txt_survival(sv_tab(), g), if (isTRUE(D$has_clinical)) txt_clin_assoc(cl_assoc(), g, in_moffitt()),
                   txt_sc(cs_naive(), g), txt_state(sv(), g),
                   if (isTRUE(D$has_coexp) && !is.null(cx())) txt_coexp(cx(), g, cx_default(), D$coexp_cells[D$coexp_cells$compartment == cx_default(), ]))
+    if (isTRUE(D$has_models)) items <- c(items, list(txt_models(mv(), g)))
     items <- Filter(Negate(is.null), items)
     tagList(tags$ul(class = "summary-list", lapply(items, tags$li)),
             note("These sentences describe the data; they do not establish mechanism or causality. p-values are unadjusted and refer to the single comparison stated. ",
@@ -357,6 +420,29 @@ server <- function(input, output, session) {
     selectInput("cx_partner", "Patient samples for", choices = ch, selected = if (isTRUE(isolate(input$cx_partner) %in% t$partner)) isolate(input$cx_partner) else t$partner[1], width = "300px") })
   output$cx_has <- reactive(!is.null(cx())); outputOptions(output, "cx_has", suspendWhenHidden = FALSE)
   cx_n <- reactive({ t <- cx_tab(); if (is.null(t)) 0L else min(sum(t$r > 0), COEXP_SHOW) + min(sum(t$r < 0), 10L) })
+  if (isTRUE(D$has_models)) {
+    output$models_cards <- renderUI(answer_cards(model_answers(mv(), gene())))
+    output$models_overview_cards <- renderUI(answer_cards(Filter(Negate(is.null), overview_answers(D$model_info))))
+    has_prot <- reactive({ x <- mv()$protein; !is.null(x) && sum(!is.na(x$value[x$pdac])) >= 3 })
+    output$mprot_box <- renderUI(if (has_prot()) tagList(q_head("Protein in the cell lines"), plotlyOutput("p_mprot", height = "340px")))
+    output$p_mlines <- renderPlotly(to_plotly(figs$mlines(), wrap = 75)); output$p_mdep <- renderPlotly(to_plotly(figs$mdep(), wrap = 75))
+    output$p_mlsub <- renderPlotly(to_plotly(figs$mlsub(), wrap = 80)); output$p_mprot <- renderPlotly(to_plotly(figs$mprot(), wrap = 75))
+    output$p_morg <- renderPlotly(to_plotly(figs$morg(), wrap = 75)); output$p_mpairs <- renderPlotly(to_plotly(figs$mpairs(), wrap = 75))
+    output$p_mtissue <- renderPlotly(to_plotly(figs$mtissue(), wrap = 120))
+    output$t_models <- renderDT({ t <- model_table(mv()); validate(need(!is.null(t), ""))
+      datatable(t, rownames = FALSE, style = "default", class = "compact stripe hover", extensions = "Buttons",
+                options = list(pageLength = 10, dom = "Bfrtip", buttons = dt_buttons(gene(), "models"))) }, server = FALSE)
+    fid_figs <- list(lines = reactive(plot_overview_lines(D$model_info)), org = reactive(plot_overview_organoids(D$model_info)),
+                     hcmi = reactive(plot_hcmi_pairs(D$model_info)))
+    output$p_fid_lines <- renderPlotly(to_plotly(fid_figs$lines(), wrap = 140)); output$p_fid_org <- renderPlotly(to_plotly(fid_figs$org(), wrap = 75))
+    output$p_hcmi <- renderPlotly(to_plotly(fid_figs$hcmi(), wrap = 75))
+    dt_plain <- function(t, n = 10) datatable(t, rownames = FALSE, style = "default", class = "compact stripe hover", filter = "top", options = list(pageLength = n, dom = "tip"))
+    output$t_lines <- renderDT(dt_plain(lines_table(D$model_info)), server = FALSE); output$t_org <- renderDT(dt_plain(organoids_table(D$model_info)), server = FALSE)
+    fid_plots <- function() list(fid_figs$lines(), fid_figs$hcmi(), fid_figs$org())
+    output$dl_fid_pdf <- downloadHandler(function() paste0("PDAC_model_overview_", format(Sys.Date()), ".pdf"), function(file) save_figs(file, fid_plots(), 10, 6.5, "pdf"))
+    output$dl_fid_png <- downloadHandler(function() paste0("PDAC_model_overview_", format(Sys.Date()), ".png"), function(file) save_figs(file, fid_plots(), 10, 6.5, "png", 1))
+    output$dl_fid_csv <- downloadHandler(function() paste0("PDAC_model_overview_", format(Sys.Date()), ".csv"), function(file) utils::write.csv(fidelity_table(D$model_info), file, row.names = FALSE))
+  }
   output$p_coexp <- renderPlotly(to_plotly(figs$coexp(), wrap = 80, height = 190 + 20 * max(4, cx_n())))
   output$p_coexp_pair <- renderPlotly({ validate(need(!is.null(cx()), "")); to_plotly(figs$coexp_pair(), wrap = 100) })
   cx_table <- reactive({ x <- cx(); req(x); x <- x[x$compartment == cx_cell(), ]
@@ -468,7 +554,9 @@ server <- function(input, output, session) {
              dl_stage = list(stub = "stage", plots = function() list(figs$stage()), data = clin_csv, w = 11, h = 5),
              dl_moffitt = list(stub = "classical_basal", plots = function() list(figs$moffitt()), data = clin_csv, w = 11, h = 5),
              dl_coexp = list(stub = "coexpression", plots = function() list(figs$coexp(), figs$coexp_pair()), data = cx_csv, w = 8, h = 9),
-             dl_umap = list(stub = "atlas_map", plots = function() list(figs$umap()), data = function() data.frame(note = "Atlas map values are a subsample; see the Data tab for per-sample values."), w = 7, h = 6))
+             dl_models = list(stub = "model_systems", plots = function() list(figs$mlines(), figs$mdep(), figs$mlsub(), figs$mprot(), figs$morg(), figs$mpairs(), figs$mtissue()),
+                              data = function() model_table(mv()), w = 9, h = 6, ncol = 2),
+             dl_umap = list(stub = "atlas_map", plots = function() list(figs$umap()), data = function() data.frame(note = "Atlas map values are a subsample; per-sample values are in the Cell types tab (Single-cell values per sample)."), w = 7, h = 6))
   for (k in names(dl)) local({ kk <- k; s <- dl[[kk]]
     output[[paste0(kk, "_pdf")]] <- downloadHandler(fname(s$stub, "pdf"), function(file) save_figs(file, s$plots(), s$w, s$h, "pdf"))
     output[[paste0(kk, "_png")]] <- downloadHandler(fname(s$stub, "png"), function(file) save_figs(file, s$plots(), s$w, s$h, "png", s$ncol))
@@ -564,6 +652,19 @@ server <- function(input, output, session) {
   output$dl_mdot_csv <- downloadHandler(mfn("cell_types", "csv"), function(f) utils::write.csv(mdot(), f, row.names = FALSE))
   output$dl_mforest_pdf <- downloadHandler(mfn("tumour_vs_normal", "pdf"), function(f) ggsave(f, for_export(mfor_fig(), 11), width = 11, height = 2 + 0.3 * length(multi()$genes)))
   output$dl_mforest_png <- downloadHandler(mfn("tumour_vs_normal", "png"), function(f) ggsave(f, for_export(mfor_fig(), 11), width = 11, height = 2 + 0.3 * length(multi()$genes), dpi = 200, bg = "white"))
+  if (isTRUE(D$has_models)) {
+    mmod <- reactive(multi_models_table(D, multi()$genes)); mmdep <- reactive(multi_dependency_table(D, multi()$genes))
+    mmod_fig <- reactive(plot_multi_models(mmod())); mmdep_fig <- reactive(plot_multi_dependency(mmdep()))
+    output$p_mmodels <- renderPlotly(to_plotly(mmod_fig(), height = hgt() + 170, colorbar = "Median<br>log2(TPM+1)")); output$p_mmdep <- renderPlotly(to_plotly(mmdep_fig(), height = hgt() + 40))
+    mm_h <- function() 2.5 + 0.3 * length(multi()$genes)
+    output$dl_mmodels_pdf <- downloadHandler(mfn("models", "pdf"), function(f) save_figs(f, list(mmod_fig(), mmdep_fig()), 10, mm_h(), "pdf"))
+    output$dl_mmodels_png <- downloadHandler(mfn("models", "png"), function(f) save_figs(f, list(mmod_fig(), mmdep_fig()), 10, mm_h(), "png", 1))
+    output$dl_mmodels_csv <- downloadHandler(mfn("models", "csv"), function(f) {
+      a <- mmod(); b <- mmdep()
+      utils::write.csv(rbind(if (!is.null(a)) data.frame(gene = a$gene, measure = paste("median percentile:", a$group), value = round(a$median, 1), n = a$n),
+                             if (!is.null(b)) rbind(data.frame(gene = b$gene, measure = "median CRISPR effect: PDAC models", value = round(b$med_pdac, 3), n = b$n_pdac),
+                                                    data.frame(gene = b$gene, measure = "median CRISPR effect: other cancer lines", value = round(b$med_other, 3), n = NA))), f, row.names = FALSE) })
+  }
   output$dl_mforest_csv <- downloadHandler(mfn("tumour_vs_normal", "csv"), function(f) utils::write.csv(mfor(), f, row.names = FALSE))
 }
 

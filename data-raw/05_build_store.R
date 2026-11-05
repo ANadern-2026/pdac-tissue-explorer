@@ -15,6 +15,12 @@
 #   coexp.sqlite  table  partners           record = list(compartment, partner, r_x1000, q_mlog10_x100): the most co-expressed
 #                                            genes of one gene in each cell type (indices into info$genes / info$compartments);
 #                                            optional layer (01b)
+#   models.sqlite tables rna, tissue, crispr, protein   model systems (06): rna = list(log2tpm_x1000, pct_x10) over info$models
+#                                            (pct NULL outside the percentile universe); tissue = percentile x10 over info$tissue_units;
+#                                            crispr = Chronos effect x1000 over info$crispr_lines; protein = x1000 over info$protein_lines;
+#                                            rna_lines = log2(TPM+1) x1000 over all DepMap lines (info$rna_lines); pairs = list(organoid, tumour)
+#                                            over info$hcmi_pairs (HCMI organoids and their source tumours, GDC);
+#                                            ids = index symbols; optional layer
 # Small tables (sample metadata, column names, single-cell groups, UMAP coordinates) go into each file's
 # `info` table. Every record is decoded again after writing and compared with the source (identical()).
 # Run from the repository root after 01-04 (and 01b, 02b, 03b):  source("data-raw/05_build_store.R")
@@ -249,21 +255,49 @@ check_index <- function(dir, say) {
     st <- store_open(path); sc_genes <- st$info$genes; store_close(st)
     if (!all(stats::na.omit(g$sym_sc) %in% sc_genes)) stop("coexp.sqlite: built from other single-cell genes than genes.rds; rebuild 01b and the coexp layer")
   }
+  path <- file.path(dir, STORE_LAYERS[["models"]])
+  if (file.exists(path)) {
+    st <- store_open(path); ids <- unique(unlist(lapply(intersect(c("rna", "tissue", "crispr", "protein", "rna_lines", "pairs"), names(st$tables)), function(t) store_ids(st, t)))); store_close(st)
+    if (!all(ids %in% g$symbol)) stop("models.sqlite: records for symbols missing from genes.rds; rerun 06 and rebuild the models layer")
+  }
   say("gene index: all ", nrow(g), " genes resolve to stored records")
 }
 
 # Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho", "clinical", "coexp". Layers whose store
 # file is newer than its source .rds files are skipped unless force = TRUE. The single-cell, phosphosite, clinical and
 # co-expression layers are optional: without their source files they are skipped (an existing store file is kept).
-build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho", "clinical", "coexp"), force = FALSE, log = TRUE) {
+build_models <- function(dir, say) {
+  src <- file.path(dir, "models.rds"); x <- readRDS(src); out <- file.path(dir, STORE_LAYERS[["models"]])
+  R <- x$rna_log2tpm_x1000; P <- x$pct_models_x10; TP <- x$pct_tissue_x10; CR <- x$crispr_x1000; PR <- x$protein_x1000
+  RL <- x$rna_lines_x1000; PO <- x$pair_organoid_x1000; PT <- x$pair_tumour_x1000
+  stopifnot(identical(colnames(R), x$models$model), identical(colnames(P), x$models$model), identical(colnames(TP), x$tissue_units$unit),
+            identical(colnames(CR), x$crispr_lines$model), identical(colnames(PR), x$protein_lines$model), all(rownames(P) %in% rownames(R)),
+            identical(colnames(RL), x$rna_lines$model), identical(colnames(PO), x$hcmi_pairs$model), identical(colnames(PT), x$hcmi_pairs$tumour), identical(rownames(PO), rownames(PT)))
+  for (m in list(R, TP, CR, PR, RL, PO)) check_ids(rownames(m), "models")
+  rec <- list(rna = function(g) list(log2tpm_x1000 = unname(R[g, ]), pct_x10 = if (g %in% rownames(P)) unname(P[g, ]) else NULL),
+              tissue = function(g) unname(TP[g, ]), crispr = function(g) unname(CR[g, ]), protein = function(g) unname(PR[g, ]),
+              rna_lines = function(g) unname(RL[g, ]), pairs = function(g) list(organoid = unname(PO[g, ]), tumour = unname(PT[g, ])))
+  ids <- list(rna = rownames(R), tissue = rownames(TP), crispr = rownames(CR), protein = rownames(PR), rna_lines = rownames(RL), pairs = rownames(PO))
+  s <- store_create(out, "models", c(rna = "rds-gzip", tissue = "rds-gzip", crispr = "rds-gzip", protein = "rds-gzip", rna_lines = "rds-gzip", pairs = "rds-gzip"),
+                    list(models = x$models, tissue_units = x$tissue_units, crispr_lines = x$crispr_lines, protein_lines = x$protein_lines, rna_lines = x$rna_lines,
+                         similarity = x$similarity, hcmi_pairs = x$hcmi_pairs, moffitt_genes = x$moffitt_genes, n_universe = length(x$universe),
+                         source = x$source, source_md5 = unname(tools::md5sum(src))))
+  for (t in names(rec)) for (k in chunks(length(ids[[t]]))) store_write(s, t, ids[[t]][k], lapply(ids[[t]][k], function(g) pack_rds(rec[[t]](g), "gzip")))
+  store_finish(s)
+  for (t in names(rec)) say("models.sqlite/", t, ": ", verify_table(s$part, t, ids[[t]], function(k) rec[[t]](ids[[t]][k])), " genes verified")
+  store_publish(s)
+  out
+}
+
+build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho", "clinical", "coexp", "models"), force = FALSE, log = TRUE) {
   log_file <- NULL
   if (log && file.exists(file.path("data-raw", "helpers.R")) && file.access("data-raw", 2) == 0) {
     source(file.path("data-raw", "helpers.R"), local = TRUE); log_file <- start_log("05_build_store")
   }
   say <- function(...) if (is.null(log_file)) message(...) else logc(log_file, ...)
   srcs <- list(cptac = "cptac.rds", bulk = "bulk_tcga_gtex.rds", sc = c("sc_groups.rds", "sc_expr.rds", "sc_umap.rds"), phospho = c("cptac_phospho.rds", "genes.rds"),
-               clinical = "clinical.rds", coexp = "sc_coexp.rds")
-  optional <- c("phospho", "clinical", "coexp")      # skipped without their source files (an existing store file is kept)
+               clinical = "clinical.rds", coexp = "sc_coexp.rds", models = "models.rds")
+  optional <- c("phospho", "clinical", "coexp", "models")      # skipped without their source files (an existing store file is kept)
   for (l in layers) {
     out <- file.path(dir, STORE_LAYERS[[l]]); src <- file.path(dir, srcs[[l]]); src <- src[file.exists(src)]
     if (l == "sc" && !all(file.exists(file.path(dir, c("sc_groups.rds", "sc_expr.rds"))))) { say("sc: source files not found, skipped"); next }
@@ -276,7 +310,7 @@ build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "dat
     }
     t0 <- Sys.time(); say(l, ": building ", basename(out), " from ", paste(basename(src), collapse = ", "), " ...")
     switch(l, cptac = build_cptac(dir, say), bulk = build_bulk(dir, say), sc = build_sc(dir, say), phospho = build_phospho(dir, say),
-           clinical = build_clinical(dir, say), coexp = build_coexp(dir, say))
+           clinical = build_clinical(dir, say), coexp = build_coexp(dir, say), models = build_models(dir, say))
     invisible(gc())
     say(basename(out), ": ", round(file.size(out) / 2^20, 1), " MB, MD5 ", unname(tools::md5sum(out)), ", ", round(as.numeric(Sys.time() - t0, units = "mins"), 1), " min")
   }
@@ -286,4 +320,5 @@ build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "dat
 }
 
 # sourcing this file builds the store; get_data.R sets options(pdacx.build_store.autorun = FALSE) and calls build_store() itself
-if (isTRUE(getOption("pdacx.build_store.autorun", TRUE))) build_store()
+if (isTRUE(getOption("pdacx.build_store.autorun", TRUE))) build_store() else
+  message("05_build_store.R: functions loaded, store not built (option pdacx.build_store.autorun is FALSE); run build_store() to build it.")

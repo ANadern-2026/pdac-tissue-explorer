@@ -1,0 +1,54 @@
+06_models started 2026-11-04 11:38:40 UTC
+source Model.csv MD5 a7423dbf345fcf5a822ab5fc7e854e5c 
+source CRISPRGeneEffect.csv MD5 a0a87b48137996f620437604b8c2eb79 
+source OmicsExpressionTPMLogp1HumanProteinCodingGenes.csv MD5 b45585365eb9580bcf4618791ea87f76 
+source harmonized_MS_CCLE_Gygi.csv MD5 6fda5fce9ff47bf43cd25f5ef6cc3ded 
+source uniprot_hugo_entrez_id_mapping.csv MD5 579c401f3872feb88ed1e34efab84578 
+source gdc_expression_files.tsv MD5 0982f6f8d96f06a59fdfe5a163bd9963 
+source genes.rds MD5 136b0b189bee803bec7730dcbafee554 
+source gene_xrefs.rds MD5 f69c7fbca9200f01afc22d5012aacf85 
+source sc_groups.rds MD5 38d9fc2793eb35d12ae125f04e586b9c 
+source sc_expr.rds MD5 8dfaba06afcdf84e0a3da5e3e3a82d6e 
+source bulk_tcga_gtex.rds MD5 468c88a4c3d785e25ed476c7f98977ff 
+source clinical.rds MD5 34bddebf000a47ea31284a3b3d18c671 
+DepMap releases: DepMap Public 26Q3; Harmonized Public Proteomics 26Q1 
+DepMap PDAC models (PAAD, PAASC): 107 (62 cell lines, 45 organoids) 
+DepMap RNA: 98 PDAC models x 19218 genes; 19036 mapped to the gene index (Entrez) 
+GDC: ORGANOID-PANCREATIC 38 tumour + 11 normal organoids; HCMI PDAC organoids 83 (42 with a sequenced source tumour); excluded HCMI pancreas models with other diagnoses: Adenocarcinoma, intestinal type; Carcinoma, undifferentiated, NOS; Carcinosarcoma, NOS; Intraductal papillary-mucinous carcinoma, invasive; Intraductal papillary-mucinous carcinoma, non-invasive; Mucinous adenocarcinoma; Neuroendocrine carcinoma, NOS; Small cell carcinoma, NOS 
+GDC RNA: 174 samples x 19280 protein-coding genes mapped to the gene index (Ensembl) 
+HCMI models also in DepMap (shown once, as the DepMap model): 14 
+universe: 17381 protein-coding genes measured in DepMap, GDC and the atlas (15557 of them also in TCGA) 
+tissue units: Acinar cells = 70; B cells = 41; Ductal: other = 77; Ductal: tumour subclusters = 108; Endocrine cells = 42; Endothelial cells = 73; Fibroblasts = 91; Mast cells = 24; Myeloid cells = 85; PDAC bulk tumours (TCGA) = 147; Pericytes = 76; Plasma cells = 27; T and NK cells = 88 
+Moffitt score from 24 basal-like and 24 classical genes in the universe (missing: UCA1, LOC400573) 
+similarity to atlas cell types over 2000 genes; closest cell type: Ductal: other = 7; Ductal: tumour subclusters = 207; Endocrine cells = 2 
+HCMI pairs: 42; own tumour closest for 32; median r own 0.2835 vs other -0.0045 
+CRISPR: 1361 lines (71 PDAC) x 18391 genes mapped (of 18434) 
+proteomics: 375 lines (19 PDAC) x 11940 genes (one protein entry per gene: canonical isoform, most lines quantified) 
+wrote app/data/models.rds (90 MB): 216 models (DepMap Cell line = 54; DepMap Organoid = 44; HCMI Organoid = 69; Tiriac 2018 Normal organoid = 11; Tiriac 2018 Organoid = 38) 
+finished 2026-11-04 11:40:23 UTC
+
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] RSQLite_2.4.6 DBI_1.3.0    
+
+loaded via a namespace (and not attached):
+ [1] digest_0.6.39       R6_2.6.1            fastmap_1.2.0       bit_4.6.0           magrittr_2.0.5      cachem_1.1.0        glue_1.8.1          blob_1.3.0         
+ [9] memoise_2.0.1       bit64_4.8.6         lifecycle_1.0.5     cli_3.6.6           askpass_1.2.1       openssl_2.4.2       vctrs_0.7.3         data.table_1.18.6.1
+[17] renv_1.3.1          rsconnect_1.11.2    compiler_4.4.1      rstudioapi_0.19.0   tools_4.4.1         curl_8.0.0          httr2_1.3.0         otel_0.2.0         
+[25] rlang_1.3.0         jsonlite_2.0.0     

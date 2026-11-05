@@ -5,7 +5,7 @@ boot_median_ci <- function(x, n = BOOT_N, seed = 1L) {
   if (length(x) < 3) return(c(NA_real_, NA_real_))
   set.seed(seed); k <- length(x)
   m <- matrix(sample(x, k * n, replace = TRUE), k)
-  m <- matrix(m[order(col(m), m)], k)
+  m <- matrix(m[order(base::col(m), m)], k)
   b <- (m[(k + 1L) %/% 2L, ] + m[k %/% 2L + 1L, ]) / 2
   unname(stats::quantile(b, c(0.025, 0.975)))
 }
