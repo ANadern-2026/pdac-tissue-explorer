@@ -17,6 +17,9 @@ RUN useradd --create-home shiny
 WORKDIR /srv/pdac
 COPY get_data.R /srv/pdac/get_data.R
 COPY data-raw/05_build_store.R data-raw/helpers.R /srv/pdac/data-raw/
+# wording of the Cell populations page (labels, definitions, notes, references): read by app/R/08_populations.R at start,
+# so text fixes ship with the code without a new data version
+COPY data-raw/reference/ /srv/pdac/data-raw/reference/
 COPY app/ /srv/pdac/app/
 RUN mkdir -p /srv/pdac/app/data /srv/pdac/usage && chown -R shiny:shiny /srv/pdac
 

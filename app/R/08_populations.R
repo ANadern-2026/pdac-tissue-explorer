@@ -18,10 +18,10 @@ POP_KIND_TXT <- c(structure = "Grouping", rule = "General", signature = "Signatu
                   score_only = "Shown as a score", not_labelled = "Not used")
 # what the atlas publication's own clusters of a cell type were (shown with the comparison table where groups are named here)
 POP_ATLAS_NOTE <- c(Fibroblasts = paste(
-  "The atlas publication (Loveless et al., Clin Cancer Res 2025) divided fibroblasts into eight clusters by two pairs of marker genes:",
+  "The original publication of these data (Loveless et al., Clin Cancer Res 2025) divided fibroblasts into eight clusters by two pairs of marker genes:",
   "myFb 1 to 5, myofibroblast-like (ACTA2, COL11A1), and iFb 1 to 3, inflammatory (C7, DPT).",
-  "The groups on this page were named independently, from the signatures on the cards.",
-  "The table shows where the cells of each group fall among the publication's clusters."))
+  "The groups on this page are defined instead by the literature signatures on the cards.",
+  "The table shows where the cells of each group fall among those clusters."))
 # plain-language versions of the reasons and notes stored with each group of cells (07_cell_populations.R)
 pop_plain_reason <- function(x) {
   x <- sub("^small cluster$", "too few cells (fewer than 50)", x)
@@ -55,10 +55,44 @@ pop_group_name <- function(id) paste0("Group ", sub("^.*_c", "", id))
 POP_DEC_EMPTY <- data.frame(decision_id = character(0), compartment = character(0), applies_to = character(0), kind = character(0),
                             question = character(0), decision = character(0), reason = character(0), refs = character(0), stringsAsFactors = FALSE)
 
-pop_load <- function(dir) {
+# Wording from the reference tables of the code repository (data-raw/reference/), when present, replaces the wording stored
+# in the data files: labels, definitions and sources of populations whose signature genes and method are unchanged, the notes
+# on how the groups were named, and the references. Text fixes then ship with the code (Dockerfile copies the tables) without a
+# new data version (user 2026-11-20). Any problem with the tables keeps the stored wording.
+POP_TEXT_COLS_APP <- c("label", "definition", "pdac_evidence", "signature_ref", "definition_refs", "also_known_as", "status")
+pop_wording <- function(i, ref_dir) {
+  if (is.null(ref_dir) || !dir.exists(ref_dir)) return(i)
+  rd <- function(f) utils::read.csv(file.path(ref_dir, f), stringsAsFactors = FALSE, check.names = FALSE, encoding = "UTF-8", colClasses = "character", na.strings = character(0))
+  ids <- function(s) { if (!length(s)) return(character(0)); v <- trimws(unlist(strsplit(as.character(s), "[;,]"))); v[nzchar(v)] }
+  tryCatch({
+    tax <- i$taxonomy; refs <- i$references
+    if (file.exists(file.path(ref_dir, "references.csv"))) {
+      cur <- rd("references.csv"); cc <- intersect(names(refs), names(cur))
+      k <- match(refs$ref_id, cur$ref_id); for (c2 in cc) refs[[c2]][!is.na(k)] <- cur[[c2]][k[!is.na(k)]]
+      add <- cur[!cur$ref_id %in% refs$ref_id, , drop = FALSE]
+    } else add <- NULL
+    if (file.exists(file.path(ref_dir, "populations.csv"))) {
+      cur <- rd("populations.csv"); k <- match(tax$population_id, cur$population_id)
+      same <- !is.na(k) & cur$signature_genes[k] == tax$signature_genes & cur$label_method[k] == tax$label_method
+      for (c2 in intersect(POP_TEXT_COLS_APP, intersect(names(tax), names(cur)))) tax[[c2]][same] <- cur[[c2]][k[same]]
+    }
+    dec <- i$decisions; if (!is.data.frame(dec) || !ncol(dec)) dec <- POP_DEC_EMPTY
+    if (file.exists(file.path(ref_dir, "decisions.csv"))) {
+      cur <- rd("decisions.csv"); cur <- cur[cur$compartment %in% c("all", i$compartment), , drop = FALSE]
+      cur <- cur[vapply(cur$applies_to, function(a) all(ids(a) %in% tax$population_id), TRUE), , drop = FALSE]
+      if (nrow(cur) && all(names(dec) %in% names(cur))) dec <- cur[, names(dec), drop = FALSE]
+    }
+    need <- unique(c(ids(dec$refs), ids(tax$definition_refs)))
+    if (!is.null(add)) refs <- rbind(refs, add[add$ref_id %in% need, names(refs), drop = FALSE])
+    if (!all(need %in% refs$ref_id)) return(i)                    # a cited reference is missing: keep the stored wording
+    rownames(dec) <- NULL; i$taxonomy <- tax; i$decisions <- dec; i$references <- refs; i
+  }, error = function(e) i)
+}
+pop_load <- function(dir, ref_dir = getOption("pdacx.ref_dir", file.path("..", "data-raw", "reference"))) {   # ref_dir relative to app/ (shiny sets the working directory there)
   out <- list()
   for (f in sort(list.files(dir, pattern = "^pop_.*\\.sqlite$", full.names = TRUE))) {
     st <- store_open(f); i <- st$info
+    i <- pop_wording(i, ref_dir)
     tax <- i$taxonomy; tax$level <- as.integer(tax$level)
     calls <- i$cluster_calls
     extra_ids <- setdiff(unique(c(calls$call, i$groups$population_id, i$map_meta$l1, i$map_meta$l2)), tax$population_id)
@@ -69,7 +103,7 @@ pop_load <- function(dir) {
       data.frame(population_id = id, compartment = i$compartment, level = if (unr && parent != root) 2L else 1L, parent_id = parent,
                  label = if (unr) paste0(plab, ": not named") else paste0(i$compartment, ": no published label"),
                  definition = if (unr) paste0("Cells among the ", sub("^([A-Z])([a-z])", "\\L\\1\\E\\2", plab, perl = TRUE), " that no published signature fitted clearly.")
-                              else "Cells of this cell type that the atlas publication did not assign to a lineage.",
+                              else "Cells that the original publication of these data did not assign to a lineage.",
                  signature_genes = "", signature_ref = "", definition_refs = "", pdac_evidence = "",
                  label_method = if (unr) "unresolved" else "unlabelled", status = "", also_known_as = "", stringsAsFactors = FALSE)
     }))
@@ -119,8 +153,8 @@ pop_map_values <- function(d, cp, symbol) {
 
 # ---- figures ----
 pop_caption <- function(cp) src_caption(if (identical(cp$level1_method, "signature"))
-  "Atlas: Loveless et al., Clin Cancer Res 2025; groups and sub-groups named here from published signatures (sources on the Cell populations page)" else
-  "Atlas: Loveless et al., Clin Cancer Res 2025; lineages as published, sub-lineages named here from published signatures (sources on the Cell populations page)")
+  "Data: Loveless et al., Clin Cancer Res 2025; groups and sub-groups defined from published signatures (sources on the Cell populations page)" else
+  "Data: Loveless et al., Clin Cancer Res 2025; lineages as published, sub-lineages defined from published signatures (sources on the Cell populations page)")
 pop_boundary <- function(cp) cp$tax$population_id[cp$tax$label_method == "boundary"]   # other cell types: shown, not counted in the make-up
 pop_xlab <- function(cp, ids, n) factor(paste0(pop_label(cp, ids), "\n(n = ", n, ")"))
 
@@ -250,12 +284,13 @@ pop_atlas_compare_ui <- function(cp, ids) {
   a <- cp$atlas_compare; if (is.null(a) || !identical(cp$level1_method, "signature") || is.na(POP_ATLAS_NOTE[cp$name])) return(NULL)
   a <- a[a$population_id %in% ids, ]; a <- a[a$level == pop_row(cp, a$population_id)$level, ]; if (!nrow(a)) return(NULL)
   cols <- sort(unique(a$atlas_label)); cols <- c(setdiff(cols, "(no atlas label)"), intersect(cols, "(no atlas label)"))
+  shown <- ifelse(cols == "(no atlas label)", "no cluster", cols)       # column headers: no word 'atlas' on the page (user 2026-11-20)
   rows <- ids[ids %in% a$population_id]
   tab <- vapply(rows, function(i) { r <- a[a$population_id == i, ]; sh <- r$n_cells / sum(r$n_cells); vapply(cols, function(cc) { v <- sum(sh[r$atlas_label == cc]); if (v > 0) fmt_pct(v) else "" }, "") }, character(length(cols)))
   tab <- matrix(tab, nrow = length(cols), dimnames = list(cols, rows))
-  tags$details(class = "how pop-compare-box", tags$summary(paste0("How these groups compare with the ", tolower(cp$name), " clusters of the atlas publication")),
+  tags$details(class = "how pop-compare-box", tags$summary(paste0("How these groups compare with the ", tolower(sub("s$", "", cp$name)), " clusters of the original publication")),
     div(class = "how-body", p(POP_ATLAS_NOTE[[cp$name]]),
-      tags$table(class = "pop-compare", tags$thead(tags$tr(tags$th("Group on this page"), tags$th("Cells"), lapply(cols, tags$th))),
+      tags$table(class = "pop-compare", tags$thead(tags$tr(tags$th("Group on this page"), tags$th("Cells"), lapply(shown, tags$th))),
         tags$tbody(lapply(rows, function(i) tags$tr(tags$td(pop_label(cp, i)), tags$td(format(sum(a$n_cells[a$population_id == i]), big.mark = ",")),
                                                      lapply(cols, function(cc) tags$td(tab[cc, i]))))))))
 }
@@ -264,7 +299,7 @@ pop_card <- function(cp, id, v = NULL, drill = FALSE) {
   g <- cp$groups[cp$groups$population_id == id, ]
   n_cells <- sum(g$n_cells); n_smp <- sum(g$n_cells >= MIN_CELLS)
   calls <- cp$calls[cp$calls$call == id, ]
-  src <- switch(meth, published = "Label published with the atlas (Loveless et al., Clin Cancer Res 2025).",
+  src <- switch(meth, published = "Label from the original publication of these data (Loveless et al., Clin Cancer Res 2025).",
                 boundary = paste0("These cells express the genes of another cell type more strongly than those of ", pop_lc(cp$name),
                                   ". They are shown here but not counted in the make-up."),
                 signature = paste0("Named here: ", if (nrow(calls) == 1) "one group" else paste(nrow(calls), "groups"),
@@ -356,11 +391,11 @@ pop_value_plotly <- function(df, value, title, cbar) {
 # ---- page ----
 pop_ui <- function() nav_panel("Cell populations", value = "pops", icon = nav_icon("pops"),
   div(class = "page-intro", h3("Cell populations"),
-      p("See a gene across the finer cell populations of the single-cell atlas. Open a cell type on the map, then one of its groups; ",
+      p("See a gene across the finer cell populations of the single-cell data. Open a cell type on the map, then one of its groups; ",
         "each population has a card with its definition, the genes behind its name and the studies it comes from."),
-      div(class = "pop-caveat", "The names come from the literature. Apart from the myeloid lineages, which the atlas authors published, ",
-          "groups of similar cells are matched here to the gene signatures of published studies, and each card cites the study and figure behind its name. ",
-          "Cells that fit no signature clearly are shown as not named.")),
+      div(class = "pop-caveat", "The groups and their names on this page are based on the literature. Myeloid lineages rest on a broad consensus ",
+          "and are straightforward to define. Their finer states, and fibroblasts in particular, are more diverse and changeable: here, groups of ",
+          "similar cells are matched to the gene signatures and definitions reported in the literature. The references for each definition are cited in place.")),
   div(class = "gene-band",
       div(class = "gene-search", selectizeInput("pg_gene", "Gene", choices = NULL, width = "100%", options = list(placeholder = "Type a gene symbol, alias or name", maxOptions = 50))),
       div(class = "gene-band-header", uiOutput("pg_crumbs"))),
@@ -433,7 +468,7 @@ pop_server <- function(input, output, session, D, gene, gene_df, save_figs) {
   output$pg_crumbs <- renderUI({
     sep <- span(class = "crumb-sep", HTML(" &rsaquo; "))
     div(class = "pop-crumbs",
-        if (st$level == "atlas") span(class = "crumb-on", "Atlas") else actionLink("pg_to_atlas", "Atlas"),
+        if (st$level == "atlas") span(class = "crumb-on", "All cell types") else actionLink("pg_to_atlas", "All cell types"),
         if (st$level != "atlas") tagList(sep, if (st$level == "compartment") span(class = "crumb-on", cp()$name) else actionLink("pg_to_comp", cp()$name)),
         if (st$level == "lineage") tagList(sep, span(class = "crumb-on", pop_label(cp(), st$lin))))
   })
@@ -454,7 +489,7 @@ pop_server <- function(input, output, session, D, gene, gene_df, save_figs) {
                hover = paste0(r$label, "<br>", m$state[w], " | sample ", m$sample[w]), stringsAsFactors = FALSE)
   })
   output$pg_map <- renderPlotly({ df <- map_df()
-    ttl <- switch(st$level, atlas = "Atlas: click a highlighted cell type", compartment = paste0(cp()$name, ": ", cp()$words[["l1"]], " (click one to open)"),
+    ttl <- switch(st$level, atlas = "All cell types: click a highlighted cell type", compartment = paste0(cp()$name, ": ", cp()$words[["l1"]], " (click one to open)"),
                   lineage = paste0(pop_label(cp(), st$lin), ": ", cp()$words[["l2"]]))
     clickable <- if (st$level == "atlas") names(POP_ATLAS)[POP_ATLAS %in% names(cps)] else if (st$level == "compartment") Filter(function(i) pop_drillable(cp(), i), unique(df$id)) else character(0)
     pop_map_plotly(df, ttl, "pg_click", clickable) })

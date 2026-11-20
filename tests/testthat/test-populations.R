@@ -175,7 +175,7 @@ test_that("level 1 assigned by signature: unresolved at level 1, boundary groups
   expect_match(as.character(pop_card(cp, "TST_B")), "Other cell type", fixed = TRUE)
   un <- as.character(pop_card(cp, "TST_UNRESOLVED"))                                               # plain language for groups that were not named
   expect_match(un, "Group 9 (40 cells): no signature fitted well enough. Closest: lineage A, then lineage B.", fixed = TRUE); expect_false(grepl("TST_c9", un, fixed = TRUE))
-  expect_match(as.character(pop_caption(cp)), "groups and sub-groups named here from published signatures", fixed = TRUE)
+  expect_match(as.character(pop_caption(cp)), "groups and sub-groups defined from published signatures", fixed = TRUE)
   store_close(cp$st)
 })
 
@@ -197,4 +197,24 @@ test_that("notes of groups read as one sentence", {
   expect_equal(pop_note_text(c("a strong C programme, csX", "a strong M programme")), "show the C (csX) and M programmes")
   expect_equal(pop_note_text(c("a strong X programme", "a strong Y programme", "looks more like Z cells")),
                c("show the X and Y programmes", "look more like Z cells"))
+})
+
+test_that("wording from the reference tables replaces the stored wording at app start; problems keep the stored wording", {
+  dir <- tempfile("pop"); dir.create(dir); x <- make_pop(dir); rd <- file.path(dir, "ref"); dir.create(rd)
+  build_pop(dir, function(...) NULL, file.path(dir, "pop_test.rds"), ref_dir = rd)          # store built without tables
+  cur <- x$taxonomy; cur$definition[cur$population_id == "A_1"] <- "Wording fixed after release."
+  cur$signature_genes[cur$population_id == "A_2"] <- "G99"; cur$definition[cur$population_id == "A_2"] <- "Must not appear."
+  utils::write.csv(cur, file.path(rd, "populations.csv"), row.names = FALSE)
+  cp <- pop_load(dir, ref_dir = rd)$test
+  expect_equal(pop_row(cp, "A_1")$definition, "Wording fixed after release.")
+  expect_equal(pop_row(cp, "A_2")$definition, x$taxonomy$definition[x$taxonomy$population_id == "A_2"])
+  store_close(cp$st)
+  cur$definition_refs[cur$population_id == "A_1"] <- "nosuchref"                              # cites a reference that does not exist
+  utils::write.csv(cur, file.path(rd, "populations.csv"), row.names = FALSE)
+  cp <- pop_load(dir, ref_dir = rd)$test
+  expect_equal(pop_row(cp, "A_1")$definition, x$taxonomy$definition[x$taxonomy$population_id == "A_1"])
+  store_close(cp$st)
+  cp <- pop_load(dir, ref_dir = file.path(dir, "missing"))$test                                 # no tables (e.g. a bare data folder)
+  expect_equal(pop_row(cp, "A_1")$definition, x$taxonomy$definition[x$taxonomy$population_id == "A_1"])
+  store_close(cp$st)
 })
