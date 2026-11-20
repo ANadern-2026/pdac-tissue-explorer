@@ -7,8 +7,8 @@ authors:
     given-names: "Ali"
     affiliation: "Leibniz-Institut für Polymerforschung Dresden e.V."
     orcid: "https://orcid.org/0000-0002-3761-1601"
-version: 0.3.0
-date-released: "2026-11-05"
+version: 0.4.0
+date-released: "2026-11-20"
 doi: "10.5281/zenodo.23264879"
 identifiers:
   - type: doi
@@ -21,8 +21,8 @@ identifiers:
     value: "10.5281/zenodo.23264997"
     description: "Processed data files (dataset, all versions)"
   - type: doi
-    value: "10.5281/zenodo.23977456"
-    description: "Processed data files, version 0.3.0 (read by get_data.R)"
+    value: "10.5281/zenodo.24396861"
+    description: "Processed data files, version 0.4.0 (read by get_data.R)"
 license: MIT
 repository-code: "https://github.com/ANadern-2026/pdac-tissue-explorer"
 url: "https://pdac.biointeract.space/"

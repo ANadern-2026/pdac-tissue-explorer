@@ -1,7 +1,8 @@
 # ---- Download the prepared data of the PDAC Tissue Explorer from Zenodo --------------------------------------
-# Dataset: Nadernezhad A. PDAC Tissue Explorer - processed data (v0.3.0). Zenodo. doi:10.5281/zenodo.23977456
+# Dataset: Nadernezhad A. PDAC Tissue Explorer - processed data (v0.4.0). Zenodo. doi:10.5281/zenodo.24396861
 # Run from the repository root:  source("get_data.R")  (or: Rscript get_data.R)   then   shiny::runApp("app")
-# Downloads the app's data store (~640 MB: genes.rds, gene_xrefs.rds and one .sqlite file per data layer) into app/data/
+# Downloads the app's data store (~910 MB: genes.rds, gene_xrefs.rds, one .sqlite file per data layer and one per cell type
+# of the Cell populations page) into app/data/
 # and verifies each file's MD5 checksum. Files already present and intact are skipped. A file that is present but differs
 # from the published version (e.g. rebuilt locally with data-raw/) is kept, with a message; set
 # options(pdacx.get_data.overwrite = TRUE) to replace it.
@@ -11,7 +12,7 @@
 # (~245 MB; carried over unchanged into this deposit) and converts them into cptac.sqlite, bulk.sqlite and sc.sqlite with
 # data-raw/05_build_store.R (5-15 minutes, ~2 GB RAM, also needs Matrix). The other layers are then downloaded as above.
 
-DATA_RECORD <- "23977456"                   # Zenodo record of data v0.3.0
+DATA_RECORD <- "24396861"                   # Zenodo record of data v0.4.0
 STORE_FILES <- c(                                # file name = MD5 checksum (as published on Zenodo)
   "genes.rds"       = "136b0b189bee803bec7730dcbafee554",
   "gene_xrefs.rds"  = "f69c7fbca9200f01afc22d5012aacf85",
@@ -21,7 +22,9 @@ STORE_FILES <- c(                                # file name = MD5 checksum (as 
   "phospho.sqlite"  = "23bec8c165bb4d1ac6d81d660aeb5cc8",
   "clinical.sqlite" = "b905eef43b487a98db08759ceac56d12",
   "coexp.sqlite"    = "add1577c37caf2d0999eb96dcf7f6509",
-  "models.sqlite"   = "4141d400a0ce96b92a83db831dfce78b")
+  "models.sqlite"   = "4141d400a0ce96b92a83db831dfce78b",
+  "pop_myeloid.sqlite"     = "d040b5b41cffeaae13f2b1ba0109b02c",     # Cell populations page (v0.4.0)
+  "pop_fibroblasts.sqlite" = "8592b97943392a7e9ffb0789b4ec6830")
 TABLE_FILES <- c(                                # v0.1 tables (doi:10.5281/zenodo.23264998), input of 05_build_store.R
   "cptac.rds"          = "2f46c794435d49dfe78005f20774bf4f",
   "bulk_tcga_gtex.rds" = "468c88a4c3d785e25ed476c7f98977ff",

@@ -65,7 +65,7 @@ deploy/server/                  self-hosting on a server: Docker Compose + Caddy
 Requires R ≥ 4.3 with `shiny`, `bslib`, `ggplot2`, `plotly`, `DT`, `Matrix`, `DBI`, `RSQLite`, `survival`, `maxstat`, `markdown`, `patchwork`, `scales`.
 
 ```r
-source("get_data.R")    # downloads the data store (~640 MB) from Zenodo into app/data/
+source("get_data.R")    # downloads the data store (~910 MB) from Zenodo into app/data/
 shiny::runApp("app")
 ```
 

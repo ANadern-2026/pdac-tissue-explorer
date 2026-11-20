@@ -15,7 +15,7 @@ sudo git clone https://github.com/ANadern-2026/pdac-tissue-explorer.git /opt/pda
 cd /opt/pdac-tissue-explorer/deploy/server
 sudo cp .env.example .env && sudo nano .env        # set PDAC_IP, PDAC_DOMAIN, ACME_EMAIL
 
-# 3. Build, download the data store (~640 MB from Zenodo, checksum-verified), start
+# 3. Build, download the data store (~910 MB from Zenodo, checksum-verified), start
 sudo docker compose build
 sudo docker compose run --rm app Rscript get_data.R
 sudo docker compose up -d
