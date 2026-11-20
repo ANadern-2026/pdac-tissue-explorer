@@ -69,3 +69,15 @@ ORCID    <- "https://orcid.org/0000-0002-3761-1601"
 # Relocation notice: only when a file MOVED_TO sits next to app.R (written by deploy/connect-cloud/deploy.R for the
 # old Connect Cloud address). Line 1 = new address; line 2 (optional) = extra sentence. Absent everywhere else.
 MOVED_TO <- if (file.exists("MOVED_TO")) trimws(readLines("MOVED_TO", warn = FALSE)) else character(0)
+
+# ---- page menu icons: small two-colour drawings on a tinted tile, one colour per page (user 2026-11-13: larger,
+# colourful, not plain symbols). Colours come from CSS (#nav a[data-value=...]: --c, --c2, --t); classes p/s/r/w below.
+NAV_ICON_SVG <- c(
+  gene  = '<path class="p" d="M7 2.5c0 5 10 4.5 10 9.5s-10 4.5-10 9.5" fill="none" stroke-width="2.3" stroke-linecap="round"/><path class="s" d="M17 2.5c0 5-10 4.5-10 9.5s10 4.5 10 9.5" fill="none" stroke-width="2.3" stroke-linecap="round"/><path class="r" d="M8.3 5.5h7.4M9.6 9h4.8M9.6 15h4.8M8.3 18.5h7.4" stroke-width="1.7" stroke-linecap="round"/>',
+  multi = '<circle class="pf" cx="6" cy="6" r="2.6"/><circle class="sf" cx="12" cy="6" r="1.6"/><circle class="pf" cx="18" cy="6" r="2.1"/><circle class="sf" cx="6" cy="12" r="1.9"/><circle class="pf" cx="12" cy="12" r="2.8"/><circle class="sf" cx="18" cy="12" r="1.3"/><circle class="pf" cx="6" cy="18" r="1.4"/><circle class="sf" cx="12" cy="18" r="2.4"/><circle class="pf" cx="18" cy="18" r="2.7"/>',
+  pops  = '<circle class="pf" cx="8.6" cy="9.4" r="5.4" opacity="0.9"/><circle class="sf" cx="16" cy="8.4" r="4.3" opacity="0.9"/><circle class="pf2" cx="13.4" cy="16.3" r="4.9" opacity="0.85"/><circle class="w" cx="8.3" cy="9.2" r="1.5"/><circle class="w" cx="16.2" cy="8.2" r="1.2"/><circle class="w" cx="13.4" cy="16.6" r="1.4"/>',
+  sets  = '<path class="r" d="M4 3.5v16.5h16.5" fill="none" stroke-width="1.8" stroke-linecap="round"/><path class="p" d="M4.2 5h4v3.2h3.4v3.4h3v3.6h4.6" fill="none" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/><path class="s" d="M4.2 5h3v1.6h3.6v1.8h3.2v1.6h5" fill="none" stroke-width="2.3" stroke-linejoin="round" stroke-linecap="round"/>',
+  models = '<path class="pf2" d="M7.2 14.5h9.6l2.6 4.7c.5 1-.2 2.3-1.4 2.3H6c-1.2 0-1.9-1.3-1.4-2.3z"/><path class="p" d="M9.5 2.8h5M10.3 3v6.3L4.6 19.2c-.6 1.1.2 2.3 1.4 2.3h12c1.2 0 2-1.2 1.4-2.3L13.7 9.3V3" fill="none" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/><circle class="sf" cx="10.3" cy="17.6" r="1.1"/><circle class="sf" cx="13.8" cy="16.2" r="0.8"/>',
+  about = '<circle class="pf" cx="12" cy="12" r="9.5"/><circle class="w" cx="12" cy="7.4" r="1.5"/><path class="wl" d="M12 11v6.3" stroke-width="2.5" stroke-linecap="round"/>',
+  usage = '<rect class="sf" x="4" y="12" width="3.6" height="8" rx="1"/><rect class="pf" x="10.2" y="6.5" width="3.6" height="13.5" rx="1"/><rect class="sf" x="16.4" y="9.5" width="3.6" height="10.5" rx="1"/>')
+nav_icon <- function(page) htmltools::span(class = "nav-ico", htmltools::HTML(paste0('<svg viewBox="0 0 24 24" aria-hidden="true">', NAV_ICON_SVG[[page]], '</svg>')))

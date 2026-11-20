@@ -1,0 +1,96 @@
+07_cell_populations.R started 2026-11-17 08:15:52 UTC; compartment Fibroblasts 
+taxonomy: 22 populations, 30 references cited; MD5 populations.csv 61203b0beeb9ea75bf7d54a6a628976f, references.csv aca730ca0db2a8b5c185b34f6e261203 
+decisions: 23 for this compartment (incl. 'all'); MD5 decisions.csv 60b74fd74ef515dbadc20a5489b299c4 
+NOTE populations with markers pending verification: FIB_MESO 
+step A skipped: using cache data-raw/work/pop_fibroblasts_base.rds 
+cache data-raw/work/pop_fibroblasts_base.rds (step A not repeated for this compartment) 
+compartment-wide programmes: FIB_HYPOXIA, FIB_STRESS, FIB_NEURALCAF, FIB_INJURY, FIB_IFCAF, FIB_MT 
+compartment map: 58523 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+FIB: 12 clusters -> FIB_INFL x3, FIB_MYO x7, FIB_UNRESOLVED x2 
+  FIB_c1         n=  6617 samples=152 genes= 1229 best=FIB_MYO        0.572 runner-up=FIB_SCHWANN   margin= 0.572 -> FIB_MYO 
+  FIB_c2         n=  4817 samples= 98 genes= 2073 best=FIB_MYO        0.518 runner-up=FIB_SCHWANN   margin= 0.521 -> FIB_MYO {strongest programme: Dissociation-stress programme (score only) (score 1.15)} 
+  FIB_c3         n=  9759 samples=133 genes= 1635 best=FIB_INFL       0.282 runner-up=FIB_SCHWANN   margin= 0.282 -> FIB_INFL {strongest programme: Dissociation-stress programme (score only) (score 0.83); strongest programme: Metallothionein programme (score only) (score 0.36)} 
+  FIB_c4         n=  6527 samples=138 genes= 2233 best=FIB_INFL       0.628 runner-up=FIB_UNIV      margin= 0.552 -> FIB_INFL {strongest programme: Dissociation-stress programme (score only) (score 0.67); strongest programme: Metallothionein programme (score only) (score 0.74)} 
+  FIB_c5         n=  4759 samples=139 genes=  588 best=FIB_MYO        0.643 runner-up=FIB_MURAL     margin= 0.582 -> FIB_MYO 
+  FIB_c6         n=  5044 samples=128 genes= 2290 best=FIB_MYO        0.774 runner-up=FIB_SCHWANN   margin= 0.775 -> FIB_MYO 
+  FIB_c7         n=  2991 samples= 97 genes= 2435 best=FIB_MYO        0.965 runner-up=FIB_UNIV      margin= 0.916 -> FIB_MYO 
+  FIB_c8         n=   344 samples= 53 genes=  782 best=FIB_INFL       0.525 runner-up=FIB_NERVE     margin= 0.485 -> FIB_INFL 
+  FIB_c9         n=  7147 samples= 91 genes=  754 best=FIB_MYO        0.239 runner-up=FIB_NERVE     margin= 0.185 -> FIB_MYO {strongest programme: Dissociation-stress programme (score only) (score 0.45); strongest programme: Injury-reactive programme (score only) (score 0.25)} 
+  FIB_c10        n=  6955 samples= 92 genes=  463 best=FIB_INFL       0.085 runner-up=FIB_NERVE     margin= 0.020 -> FIB_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Dissociation-stress programme (score only) (score 0.30); strongest programme: Neural-like CAF programme after chemotherapy (score only) (score 0.18); strongest programme: Injury-reactive programme (score only) (score 0.21)} 
+  FIB_c11        n=  3175 samples= 72 genes=  437 best=FIB_INFL       0.094 runner-up=FIB_NERVE     margin= 0.030 -> FIB_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Hypoxia / tumour-like programme (score only) (score 0.20); strongest programme: Dissociation-stress programme (score only) (score 0.56); strongest programme: Injury-reactive programme (score only) (score 0.39); strongest programme: Metallothionein programme (score only) (score 0.23)} 
+  FIB_c12        n=   388 samples= 70 genes=  511 best=FIB_MYO        0.201 runner-up=FIB_MURAL     margin= 0.144 -> FIB_MYO {strongest programme: Dissociation-stress programme (score only) (score 0.26); strongest programme: Injury-reactive programme (score only) (score 0.27); strongest programme: Metallothionein programme (score only) (score 0.26)} 
+level-1 cells: FIB_INFL=16630, FIB_MYO=31763, FIB_UNRESOLVED=10130 
+FIB_INFL: 16630 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+FIB_INFL: 14 clusters -> FIB_ICAF x2, FIB_INFL_UNRESOLVED x4, FIB_RCAF x1, FIB_RESIDENT x7 
+  FIB_INFL_c1    n=  2792 samples= 50 genes= 2005 best=FIB_RCAF       0.034 runner-up=FIB_ICAF      margin= 0.178 -> FIB_INFL_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Dissociation-stress programme (score only) (score 2.11); strongest programme: Injury-reactive programme (score only) (score 0.19)} 
+  FIB_INFL_c2    n=  2098 samples= 98 genes= 1024 best=FIB_RESIDENT   0.441 runner-up=FIB_RCAF      margin= 0.413 -> FIB_RESIDENT {strongest programme: Complement programme, csCAF (score only) (score 0.48); strongest programme: Metallothionein programme (score only) (score 0.61)} 
+  FIB_INFL_c3    n=   342 samples= 43 genes= 1738 best=FIB_RCAF       0.089 runner-up=FIB_RESIDENT  margin= 0.236 -> FIB_INFL_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Dissociation-stress programme (score only) (score 1.22); strongest programme: Metallothionein programme (score only) (score 0.16)} 
+  FIB_INFL_c4    n=  2264 samples= 82 genes= 2434 best=FIB_ICAF       0.506 runner-up=FIB_RESIDENT  margin= 0.556 -> FIB_ICAF {strongest programme: Dissociation-stress programme (score only) (score 0.74); strongest programme: Injury-reactive programme (score only) (score 0.78); strongest programme: Metallothionein programme (score only) (score 0.62)} 
+  FIB_INFL_c5    n=  1960 samples= 91 genes= 1817 best=FIB_RESIDENT   0.323 runner-up=FIB_RCAF      margin= 0.339 -> FIB_RESIDENT {strongest programme: Metallothionein programme (score only) (score 0.45)} 
+  FIB_INFL_c6    n=   491 samples= 71 genes= 1415 best=FIB_ICAF       0.054 runner-up=FIB_RCAF      margin= 0.108 -> FIB_INFL_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Complement programme, csCAF (score only) (score 0.30); strongest programme: Dissociation-stress programme (score only) (score 0.52); strongest programme: Injury-reactive programme (score only) (score 0.50); strongest programme: Metallothionein programme (score only) (score 0.40)} 
+  FIB_INFL_c7    n=   150 samples= 41 genes= 1972 best=FIB_RCAF       0.806 runner-up=FIB_RESIDENT  margin= 0.480 -> FIB_RCAF {strongest programme: Dissociation-stress programme (score only) (score 1.06)} 
+  FIB_INFL_c8    n=   458 samples= 47 genes= 2214 best=FIB_RESIDENT   0.018 runner-up=FIB_RCAF      margin= 0.088 -> FIB_INFL_UNRESOLVED [no signature reaches the minimum score] {strongest programme: Complement programme, csCAF (score only) (score 0.39); strongest programme: Dissociation-stress programme (score only) (score 0.62); strongest programme: Metallothionein programme (score only) (score 0.44)} 
+  FIB_INFL_c9    n=  1256 samples=101 genes=  754 best=FIB_RESIDENT   0.228 runner-up=FIB_ICAF      margin= 0.122 -> FIB_RESIDENT {strongest programme: Complement programme, csCAF (score only) (score 0.47); strongest programme: Dissociation-stress programme (score only) (score 0.48); strongest programme: Injury-reactive programme (score only) (score 0.42); strongest programme: Metallothionein programme (score only) (score 0.56)} 
+  FIB_INFL_c10   n=  1285 samples= 85 genes= 2100 best=FIB_RESIDENT   0.272 runner-up=FIB_RCAF      margin= 0.275 -> FIB_RESIDENT {strongest programme: Complement programme, csCAF (score only) (score 0.45); strongest programme: Dissociation-stress programme (score only) (score 0.77)} 
+  FIB_INFL_c11   n=  1873 samples= 73 genes= 1929 best=FIB_RESIDENT   1.231 runner-up=FIB_ICAF      margin= 1.100 -> FIB_RESIDENT 
+  FIB_INFL_c12   n=   942 samples= 71 genes= 2770 best=FIB_RESIDENT   0.821 runner-up=FIB_ICAF      margin= 0.264 -> FIB_RESIDENT {strongest programme: Complement programme, csCAF (score only) (score 0.95); strongest programme: Metallothionein programme (score only) (score 1.30)} 
+  FIB_INFL_c13   n=   301 samples= 38 genes= 2441 best=FIB_ICAF       0.763 runner-up=FIB_RCAF      margin= 0.887 -> FIB_ICAF {resembles Universal-like (PI16+) fibroblasts by the level-1 markers} 
+  FIB_INFL_c14   n=   418 samples= 44 genes= 1939 best=FIB_RESIDENT   0.942 runner-up=FIB_ICAF      margin= 0.870 -> FIB_RESIDENT 
+FIB_MYO: 31763 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+FIB_MYO: 11 clusters -> FIB_HOPX x3, FIB_LRRC15 x6, FIB_MMP1 x1, FIB_MYO_UNRESOLVED x1 
+  FIB_MYO_c1     n=  5599 samples=140 genes= 1166 best=FIB_LRRC15     0.586 runner-up=FIB_HOPX      margin= 0.206 -> FIB_LRRC15 
+  FIB_MYO_c2     n=  4623 samples= 72 genes= 2172 best=FIB_LRRC15     0.633 runner-up=FIB_HOPX      margin= 0.339 -> FIB_LRRC15 {strongest programme: Dissociation-stress programme (score only) (score 1.33)} 
+  FIB_MYO_c3     n=  1356 samples= 72 genes= 1876 best=FIB_MMP1       0.337 runner-up=FIB_LRRC15    margin= 0.153 -> FIB_MMP1 {strongest programme: Dissociation-stress programme (score only) (score 0.64); strongest programme: Injury-reactive programme (score only) (score 0.54); strongest programme: Metallothionein programme (score only) (score 0.89)} 
+  FIB_MYO_c4     n=  3326 samples=113 genes=  460 best=FIB_LRRC15     0.497 runner-up=FIB_MMP1      margin= 0.278 -> FIB_LRRC15 
+  FIB_MYO_c5     n=  4871 samples=123 genes= 2256 best=FIB_HOPX       1.040 runner-up=FIB_LRRC15    margin= 0.809 -> FIB_HOPX 
+  FIB_MYO_c6     n=   418 samples= 78 genes= 1674 best=FIB_HOPX       0.724 runner-up=FIB_MMP1      margin= 0.467 -> FIB_HOPX 
+  FIB_MYO_c7     n=  1658 samples= 86 genes= 2372 best=FIB_LRRC15     1.151 runner-up=FIB_HOPX      margin= 0.823 -> FIB_LRRC15 
+  FIB_MYO_c8     n=  1267 samples=119 genes= 2427 best=FIB_HOPX       0.998 runner-up=FIB_LRRC15    margin= 0.423 -> FIB_HOPX 
+  FIB_MYO_c9     n=   813 samples= 45 genes= 2763 best=FIB_LRRC15     1.235 runner-up=FIB_MMP1      margin= 0.991 -> FIB_LRRC15 {strongest programme: Dissociation-stress programme (score only) (score 1.80)} 
+  FIB_MYO_c10    n=  7353 samples= 89 genes=  754 best=FIB_LRRC15     0.348 runner-up=FIB_MMP1      margin= 0.231 -> FIB_LRRC15 {strongest programme: Dissociation-stress programme (score only) (score 0.40)} 
+  FIB_MYO_c11    n=   479 samples= 68 genes=  531 best=FIB_LRRC15     0.178 runner-up=FIB_HOPX      margin= 0.014 -> FIB_MYO_UNRESOLVED [two signatures score almost equally] {strongest programme: Dissociation-stress programme (score only) (score 0.25); strongest programme: Injury-reactive programme (score only) (score 0.26); strongest programme: Metallothionein programme (score only) (score 0.29)} 
+  atlas labels of FIB_INFL: iFb 2 66%, iFb 1 23%, iFb 3 4%, myFb 1 3%, myFb 4 2%, myFb 3 1%, myFb 5 1%, myFb 2 1% 
+  atlas labels of FIB_MYO: myFb 1 39%, myFb 4 18%, iFb 2 16%, myFb 3 11%, myFb 2 8%, iFb 3 4%, iFb 1 2%, myFb 5 2% 
+  atlas labels of FIB_UNRESOLVED: iFb 2 60%, iFb 3 14%, myFb 4 10%, myFb 1 6%, iFb 1 5%, myFb 3 2%, myFb 2 2%, myFb 5 1% 
+level-2 cells: FIB_HOPX=6556, FIB_ICAF=2565, FIB_INFL_UNRESOLVED=4083, FIB_LRRC15=23372, FIB_MMP1=1356, FIB_MYO_UNRESOLVED=479, FIB_RCAF=150, FIB_RESIDENT=9832, FIB_UNRESOLVED=10130 
+groups: 448 sample x lineage, 848 sample x sub-lineage; with >= 20 cells: 541 
+markers: 379 population-gene pairs (q < 0.05, detected in >= 10% of cells) 
+map subsample: 16985 cells 
+cell labels data-raw/work/pop_fibroblasts_cell_labels.tsv.gz MD5 bc169b6e9ec52ece6c18c3af179cc16e 
+output pop_fibroblasts.rds 76.8 MB, MD5 67779c585e8db922c16ee71b87c42fb2 
+finished 2026-11-17 08:31:47 UTC 
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] DT_0.34.0          plotly_4.12.1      bslib_0.12.0       SeuratObject_5.4.0 sp_2.2-3           shiny_1.14.0       maxstat_0.7-26     survival_3.8-6    
+ [9] ggplot2_4.0.3      testthat_3.3.2     RSQLite_2.4.6      DBI_1.3.0          Matrix_1.7-5      
+
+loaded via a namespace (and not attached):
+ [1] tidyselect_1.2.1      viridisLite_0.4.3     dplyr_1.2.1           farver_2.1.2          blob_1.3.0            S7_0.2.2              fastmap_1.2.0        
+ [8] promises_1.5.0        digest_0.6.39         dotCall64_1.2         mime_0.13             lifecycle_1.0.5       waldo_0.6.2           magrittr_2.0.5       
+[15] compiler_4.4.1        rlang_1.3.0           sass_0.4.10           tools_4.4.1           igraph_2.3.3          yaml_2.3.12           data.table_1.18.6.1  
+[22] labeling_0.4.3        htmlwidgets_1.6.4     bit_4.6.0             RColorBrewer_1.1-3    pkgload_1.5.3         rsconnect_1.11.2      withr_3.0.3          
+[29] purrr_1.2.2           desc_1.4.3            grid_4.4.1            xtable_1.8-8          future_1.80.0         progressr_1.0.0       globals_0.20.0       
+[36] scales_1.4.0          dichromat_2.0-1       cli_3.6.6             mvtnorm_1.4-2         generics_0.1.4        exactRankTests_0.8-37 otel_0.2.0           
+[43] RSpectra_0.16-2       rstudioapi_0.19.0     future.apply_1.20.2   httr_1.4.9            commonmark_2.0.0      cachem_1.1.0          splines_4.4.1        
+[50] parallel_4.4.1        vctrs_0.7.3           jsonlite_2.0.0        litedown_0.11         bit64_4.8.6           irlba_2.3.7           listenv_1.1.0        
+[57] crosstalk_1.2.2       harmony_1.2.4         fontawesome_0.5.3     jquerylib_0.1.4       tidyr_1.3.2           glue_1.8.1            parallelly_1.48.0    
+[64] spam_2.11-4           codetools_0.2-20      cowplot_1.2.0         uwot_0.2.5            RcppAnnoy_0.0.23      gtable_0.3.6          later_1.4.8          
+[71] tibble_3.3.1          pillar_1.11.1         htmltools_0.5.9       brio_1.1.5            R6_2.6.1              rprojroot_2.1.1       lattice_0.22-9       
+[78] markdown_2.0          RhpcBLASctl_0.23-42   memoise_2.0.1         httpuv_1.6.17         Rcpp_1.1.2            xfun_0.61             fs_2.1.0             
+[85] pkgconfig_2.0.3      

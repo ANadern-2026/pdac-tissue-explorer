@@ -17,3 +17,8 @@ rsconnect/
 deploy/server/.env
 # relocation notice for the old Connect Cloud address (written by deploy/connect-cloud/deploy.R)
 app/MOVED_TO
+
+# 07_cell_populations.R step-A caches and per-cell label tables (large)
+data-raw/work/
+# local analysis outputs (large; not part of the app)
+results/

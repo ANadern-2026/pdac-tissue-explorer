@@ -75,14 +75,25 @@ strip <- function(..., label = "View settings") div(class = "settings-strip", di
 dt_buttons <- function(symbol, stub) { f <- paste0(symbol, "_", stub, "_", format(Sys.Date())); list("copy", list(extend = "csvHtml5", filename = f, title = f)) }
 
 # ---- UI ------------------------------------------------------------------------------------------------------
-ui <- page_navbar(
-  title = span(APP_TITLE, span(class = "badge-version", paste0("v", APP_VERSION))), theme = theme_app, id = "nav", fillable = FALSE,
-  header = tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE), if (USAGE_ON) usage_js(),
-                             tags$script(HTML("document.addEventListener('toggle', function(e) { if (e.target.tagName === 'DETAILS' && e.target.open && window.jQuery && $.fn.dataTable) $($.fn.dataTable.tables(true)).DataTable().columns.adjust(); }, true);"))),
+# Layout: top ribbon (title, version, source code) and the pages as a left-hand column with an icon each (user request
+# 2026-11-13); input$nav keeps the page value as before. Below 768 px the column becomes a scrollable row above the page.
+HAS_FIB_POP <- isTRUE(D$has_pop) && "fibroblasts" %in% names(D$pops)
+ui <- page_fluid(theme = theme_app, class = "app-page",
+  tagList(tags$head(includeCSS("www/style.css"), tags$title(APP_TITLE), if (USAGE_ON) usage_js(),
+                             tags$script(HTML("document.addEventListener('toggle', function(e) { if (e.target.tagName === 'DETAILS' && e.target.open && window.jQuery && $.fn.dataTable) $($.fn.dataTable.tables(true)).DataTable().columns.adjust(); }, true);")),
+                             # WebGL maps (scattergl) lose their drawing context when other pages use up the browser's limit of
+                             # about 16 contexts; redraw every WebGL plot of a tab when it is shown again (same as "Reset axes")
+                             tags$script(HTML("$(document).on('shown.bs.tab', function(e) { var pane = document.querySelector($(e.target).attr('data-bs-target') || $(e.target).attr('href')); if (!pane || !window.Plotly) return; setTimeout(function() { pane.querySelectorAll('.js-plotly-plot').forEach(function(gd) { if (gd.querySelector('canvas') && gd.offsetParent !== null) Plotly.relayout(gd, {'xaxis.autorange': true, 'yaxis.autorange': true}); }); }, 50); });"))),
                    if (length(MOVED_TO)) div(class = "moved-banner", strong("This app has moved: "),
                                              a(href = MOVED_TO[1], target = "_top", sub("/$", "", sub("^https?://", "", MOVED_TO[1]))),
                                              if (length(MOVED_TO) > 1) span(" ", MOVED_TO[2]))),
-  nav_panel("Explore a gene", value = "gene",
+  # phones: the page menu is a scrollable row; keep the active page in view
+  tags$script(HTML("$(document).on('shown.bs.tab', '#nav a', function(e) { if (e.target.scrollIntoView) e.target.scrollIntoView({block: 'nearest', inline: 'center'}); });")),
+  div(class = "app-top",
+      div(class = "app-title", APP_TITLE, span(class = "badge-version", paste0("v", APP_VERSION))),
+      tags$a(class = "app-source", href = REPO_URL, target = "_blank", rel = "noopener noreferrer", icon("github"), span("Source code"))),
+  div(class = "app-shell", navset_pill_list(id = "nav", widths = c(2, 10), well = FALSE,
+  nav_panel("Explore a gene", value = "gene", icon = nav_icon("gene"),
     div(class = "gene-band",
       div(class = "gene-search",
         selectizeInput("gene", "Gene", choices = NULL, width = "100%", options = list(placeholder = "Type a gene symbol, alias or name", maxOptions = 50)),
@@ -142,11 +153,17 @@ ui <- page_navbar(
           plotlyOutput("p_states", height = "640px"), fig_downloads("dl_states"),
           note("One dot per tissue sample with at least ", MIN_CELLS, " cells of that type. Healthy donor pancreas, adjacent normal tissue and treatment-naive primary tumours and liver metastases; treated primary tumours (chemotherapy or chemoradiation) are shown separately. ",
                "Tissue states come from different studies, so study and state are partly confounded.")),
+        # fibroblasts: the groups of the Cell populations page (literature signatures, decision record), not the atlas's own
+        # myFb/iFb labels (user 2026-11-13); without a fibroblast population store the panel is left out
         nav_panel("Subtypes",
-          layout_columns(col_widths = breakpoints(sm = 12, xl = c(7, 5)),
-            div(plotlyOutput("p_fibro", height = "480px"), fig_downloads("dl_fibro")),
+          layout_columns(col_widths = breakpoints(sm = 12, xl = if (HAS_FIB_POP) c(12, 6) else 6),
+            if (HAS_FIB_POP) div(plotlyOutput("p_fibro", height = "520px"),
+              tags$a(href = "#", class = "pop-open", onclick = "$('#nav a[data-value=\"pops\"]').tab('show'); Shiny.setInputValue('pg_open', 'fibroblasts', {priority: 'event'}); return false;",
+                     HTML("Open fibroblasts on the Cell populations page: definitions, decisions and references &rsaquo;")),
+              fig_downloads("dl_fibro")),
             div(plotlyOutput("p_ductal", height = "480px"), fig_downloads("dl_ductal"))),
-          note("Fibroblast and tumour-cell subclusters as published with the atlas (Loveless et al., Clin Cancer Res 2025).")),
+          note(if (HAS_FIB_POP) "Fibroblast groups are those of the Cell populations page, named from published signatures (sources there); grey: cells without a name. ",
+               "Tumour-cell subclusters as published with the atlas (Loveless et al., Clin Cancer Res 2025).")),
         if (isTRUE(D$has_coexp)) nav_panel("Co-expression",
           strip(selectInput("cx_cell", "Cell type", choices = NULL, width = "300px"), uiOutput("cx_partner_ui")),
           layout_columns(col_widths = breakpoints(sm = 12, xl = c(5, 7)),
@@ -189,7 +206,7 @@ ui <- page_navbar(
           fig_downloads("dl_umap"),
           note("A stratified subsample of atlas cells, positioned by the published atlas UMAP. Grey = not detected.")),
       )),
-  nav_panel("Compare genes", value = "multi",
+  nav_panel("Compare genes", value = "multi", icon = nav_icon("multi"),
     layout_sidebar(
       sidebar = sidebar(width = 320,
         textAreaInput("genelist", "Genes (comma, space or line separated; up to 40)", value = EXAMPLE_LISTS[[1]], rows = 6),
@@ -198,7 +215,8 @@ ui <- page_navbar(
       card(card_header("Cell types"), plotlyOutput("p_mdot", height = "auto"), fig_downloads("dl_mdot")),
       card(card_header("Tumour vs normal"), plotlyOutput("p_mforest", height = "auto"), fig_downloads("dl_mforest")),
       if (isTRUE(D$has_models)) card(card_header("Model systems"), plotlyOutput("p_mmodels", height = "auto"), plotlyOutput("p_mmdep", height = "auto"), fig_downloads("dl_mmodels")))),
-  if (isTRUE(D$has_clinical)) nav_panel("Gene sets & survival", value = "sets",
+  if (isTRUE(D$has_pop)) pop_ui(),
+  if (isTRUE(D$has_clinical)) nav_panel("Gene sets & survival", value = "sets", icon = nav_icon("sets"),
     div(class = "gene-band set-band",
       div(class = "gene-search",
         selectizeInput("set_genes", "Genes (up to 6)", choices = NULL, multiple = TRUE, width = "100%",
@@ -234,7 +252,7 @@ ui <- page_navbar(
          "The plot below shows the same definition in the other, independent cohort (overall survival); a pattern that holds in both is more credible. ",
          "Filters reduce the number of patients quickly: both cohorts are mostly resected tumours of stage I-II (TCGA-PAAD: 3 stage III and 3 stage IV; CPTAC: 39 stage III, 9 stage IV). ",
          "These are exploratory, observational associations; with many combinations tried, some will reach p < 0.05 by chance.")),
-  if (isTRUE(D$has_models)) nav_panel("Model systems", value = "models",
+  if (isTRUE(D$has_models)) nav_panel("Model systems", value = "models", icon = nav_icon("models"),
     div(class = "page-intro", h3("PDAC model systems"),
         p("Cell lines and patient-derived organoids serve different purposes, so they are shown separately. Resemblance always refers to one stated reference: ",
           "the average RNA of tumour cells in treatment-naive primary PDAC (single-cell atlas). For a single gene, open its page and the tab 'Model systems'.")),
@@ -259,9 +277,8 @@ ui <- page_navbar(
     note("Models: DepMap Public 26Q3 (Broad Institute, CC BY 4.0) and GDC ORGANOID-PANCREATIC (Tiriac et al., Cancer Discov 2018). ",
          "The models and the data are from the Human Cancer Models Initiative (HCMI) https://ocg.cancer.gov/programs/HCMI; dbGaP accession number phs001486. ",
          "These are RNA summaries only; growth, drug response and genetics also matter when choosing a model.")),
-  nav_panel("About", value = "about", includeMarkdown("www/about.md")),
-  nav_spacer(),
-  nav_item(tags$a(href = REPO_URL, target = "_blank", "Source code"))
+  nav_panel("About", value = "about", icon = nav_icon("about"), includeMarkdown("www/about.md"))
+  ))
 )
 
 # ---- server --------------------------------------------------------------------------------------------------
@@ -348,7 +365,7 @@ server <- function(input, output, session) {
     prot = reactive(plot_cptac_paired(pr(), gene(), "protein")), rna = reactive(plot_cptac_paired(rn(), gene(), "RNA")),
     bulk = reactive(plot_bulk(bk(), gene())), ct = reactive(plot_celltypes(cs(), gene(), input$context)),
     share = reactive(plot_share(cs(), gene())), frac = reactive(plot_frac(cs(), gene())),
-    states = reactive(plot_states(sv(), gene(), input$compartments)), fibro = reactive(plot_fibro(sv(), gene())),
+    states = reactive(plot_states(sv(), gene(), input$compartments)), fibro = reactive(if (HAS_FIB_POP) plot_pop_fine(D$pops$fibroblasts, pop_values(D, D$pops$fibroblasts, gene()), gene()) else empty_plot("")),
     ductal = reactive(plot_ductal(sv(), gene())), umap = reactive(plot_umap_static(D$umap, gene(), uv())),
     phsites = reactive(plot_phospho_sites(ph_tab(), gene(), relative = ph_relmode(), has_sites = !is.null(ph()))),
     phsite = reactive(plot_cptac_paired(ph_site_pairs(FALSE), gene(), "phosphosite")),
@@ -548,7 +565,8 @@ server <- function(input, output, session) {
              dl_bulk = list(stub = "TCGA_GTEx", plots = function() list(figs$bulk()), data = bk, w = 7, h = 5),
              dl_ct = list(stub = "cell_types", plots = function() list(figs$ct(), figs$share(), figs$frac()), data = function() cs()$summary, w = 8, h = 6),
              dl_states = list(stub = "tissue_states", plots = function() list(figs$states()), data = sc_table, w = 11, h = 8),
-             dl_fibro = list(stub = "fibroblast_subtypes", plots = function() list(figs$fibro()), data = sc_table, w = 9, h = 5),
+             dl_fibro = list(stub = "fibroblast_groups", plots = function() list(figs$fibro()), w = 11, h = 5.5,
+                             data = function() pop_fine_table(D$pops$fibroblasts, pop_values(D, D$pops$fibroblasts, gene()), gene())),
              dl_ductal = list(stub = "tumour_cell_states", plots = function() list(figs$ductal()), data = sc_table, w = 9, h = 5),
              dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr(), figs$spline(), figs$km_other()), data = clin_csv, w = 8, h = 6, ncol = 2),
              dl_stage = list(stub = "stage", plots = function() list(figs$stage()), data = clin_csv, w = 11, h = 5),
@@ -666,6 +684,10 @@ server <- function(input, output, session) {
                                                     data.frame(gene = b$gene, measure = "median CRISPR effect: other cancer lines", value = round(b$med_other, 3), n = NA))), f, row.names = FALSE) })
   }
   output$dl_mforest_csv <- downloadHandler(mfn("tumour_vs_normal", "csv"), function(f) utils::write.csv(mfor(), f, row.names = FALSE))
+
+  # ---- cell populations (R/08_populations.R) ----
+  if (isTRUE(D$has_pop)) pop_server(input, output, session, D, gene, gene_df, save_figs)
+  if (USAGE_ON) observeEvent(input$pg_open, tr$log("population", input$pg_open))
 }
 
 shinyApp(ui, server)

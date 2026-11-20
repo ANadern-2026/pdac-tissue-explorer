@@ -10,6 +10,7 @@ An interactive web app for exploring where any human gene is expressed in pancre
 
 - **Explore a gene.** A plain-language summary, then sample-level views: paired tumour vs adjacent-normal protein, RNA and phosphosites (CPTAC; phosphosites also relative to the protein level), PDAC vs healthy pancreas (TCGA/GTEx), expression by cell type with transcript shares, expression across tissue states per cell type, fibroblast and tumour-cell subtypes, the gene on the atlas map, its clinical context (survival, stage and the classical/basal-like tumour subtype in TCGA-PAAD and CPTAC) and the genes it is co-expressed with within each cell type across tumours. Search by symbol, alias or full name; links to the gene's pages at NCBI Gene, UniProt, the Human Protein Atlas, Open Targets and DepMap.
 - **Model systems.** For a gene: expression in PDAC cell lines compared with all other cancer cell lines, CRISPR knockout effect (dependency), expression against each line's classical/basal-like character, protein where measured; expression in patient-derived organoids by collection, and whether organoids keep the level of the tumour they came from. An overview page shows how closely each cell line and organoid resembles tumour cells of patients. Cell lines and organoids are kept apart and compared only within one technology.
+- **Cell populations**. From the atlas map to the finer populations of a cell type, currently myeloid cells and fibroblasts, named from published lineage labels and literature signatures (each with its source): the gene on each map and per sample, the make-up by tissue state, marker genes, and for every population a card with its definition, signature genes, label source and references.
 - **Compare genes.** Up to 40 genes at once as a cell-type dot heatmap, a tumour-vs-normal forest plot and model-system medians with dependency.
 - **Gene sets & survival.** Survival of patients grouped by up to six genes, each high or low as chosen: by the number of genes in the chosen direction, all vs fewer, or a combined score; filters for stage, sex, age and resection margin; the same definition checked in the other cohort.
 - **Download.** Every figure as PDF/PNG and the underlying per-sample values as CSV.
@@ -48,6 +49,9 @@ data-raw/            data preparation, run in order:
   05_build_store.R         on-disk data store: one SQLite file per dataset, one compressed record per gene
   06a_fetch_models.R       downloads the DepMap and GDC (organoid) files for 06
   06_models.R              model systems: cell lines and organoids, dependency, subtype character, resemblance to patient tumour cells
+  07_cell_populations.R    cell populations: published lineages + sub-lineages assigned by literature signatures (per compartment; myeloid first)
+  reference/               populations.csv (definitions, signature genes, sources), references.csv (citations, DOIs) and decisions.csv
+                           (why each label is or is not used, with references) used by 07/05 and shown in the app
   logs/                    provenance logs (input checksums, counts, session info)
 tests/               testthat tests: pipeline on a miniature atlas, data store, app statistics;
                      regression-v01.R compares every output of the data store with the v0.1 in-memory data
@@ -82,6 +86,7 @@ source("data-raw/04b_gene_xrefs.R")         # identifiers for the links to other
 source("data-raw/01b_sc_coexpression.R")    # ~15 min; co-expression partners per cell type
 source("data-raw/06a_fetch_models.R")       # DepMap + GDC organoid files (DepMap file index saved by hand, see data-raw/README.md)
 source("data-raw/06_models.R")             # ~3 min, ~8 GB RAM
+source("data-raw/07_cell_populations.R")   # step A ~50 GB once (atlas read), then ~20 min; definitions in data-raw/reference/
 source("data-raw/05_build_store.R")         # converts the tables into the app's on-disk data store
 testthat::test_dir("tests/testthat")
 ```

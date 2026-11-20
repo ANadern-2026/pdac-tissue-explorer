@@ -1,0 +1,114 @@
+07_cell_populations.R started 2026-11-10 07:46:52 UTC; compartment Myeloid 
+taxonomy: 26 populations, 13 references cited; MD5 populations.csv 3e0d9da3ef79d30dd5224ec35b7d8065, references.csv 015932804bc396443ba93e7adc94ece8 
+step A skipped: using cache data-raw/work/pop_myeloid_base.rds 
+level-1 cells: MYE_DC=7361, MYE_MAC=49030, MYE_MAST=3306, MYE_MONO=14886, MYE_NEU=1988 
+compartment map: 76571 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+published level-1 labels vs their own marker set (share of cells scoring highest on it): MYE_DC=63%, MYE_MAC=72%, MYE_MAST=94%, MYE_MONO=86%, MYE_NEU=77% 
+MYE_MAC: 49030 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+MYE_MAC: 17 clusters -> MAC_C1QC x2, MAC_IFN x1, MAC_INFLAM x1, MAC_SPP1 x9, MYE_MAC_UNRESOLVED x4 
+  MYE_MAC_c1     n=  3819 samples=112 genes=  870 best=MAC_INFLAM     0.660 runner-up=MAC_SPP1      margin= 0.663 -> MAC_INFLAM {resembles Neutrophils by the level-1 markers; strongest programme: Monocyte-like programme (score only) (score 0.88)} 
+  MYE_MAC_c2     n=  7365 samples=155 genes=  570 best=MAC_SPP1       0.598 runner-up=MAC_C1QC      margin= 0.410 -> MYE_MAC_UNRESOLVED [few genes detected per cell (possible low-quality cells)] 
+  MYE_MAC_c3     n=  4749 samples=108 genes= 1522 best=MAC_SPP1       1.213 runner-up=MAC_INFLAM    margin= 1.184 -> MAC_SPP1 
+  MYE_MAC_c4     n=  4239 samples=119 genes= 1782 best=MAC_RTM        0.799 runner-up=MAC_C1QC      margin= 0.048 -> MYE_MAC_UNRESOLVED [two signatures score almost equally] 
+  MYE_MAC_c5     n=  5522 samples=132 genes= 1615 best=MAC_C1QC       0.434 runner-up=MAC_SPP1      margin= 0.412 -> MAC_C1QC 
+  MYE_MAC_c6     n=  3472 samples=128 genes= 1289 best=MAC_SPP1       0.076 runner-up=MAC_IFN       margin= 0.210 -> MYE_MAC_UNRESOLVED [no signature reaches the minimum score] {resembles Monocytes by the level-1 markers; strongest programme: Monocyte-like programme (score only) (score 1.12)} 
+  MYE_MAC_c7     n=  3086 samples=124 genes= 1634 best=MAC_IFN        0.971 runner-up=MAC_SPP1      margin= 0.439 -> MAC_IFN 
+  MYE_MAC_c8     n=  1967 samples=114 genes= 2256 best=MAC_SPP1       1.444 runner-up=MAC_C1QC      margin= 1.457 -> MAC_SPP1 
+  MYE_MAC_c9     n=  1834 samples= 92 genes= 2308 best=MAC_SPP1       0.597 runner-up=MAC_C1QC      margin= 0.236 -> MAC_SPP1 
+  MYE_MAC_c10    n=  2419 samples=121 genes= 1528 best=MAC_INFLAM     0.009 runner-up=MAC_C1QC      margin= 0.091 -> MYE_MAC_UNRESOLVED [no signature reaches the minimum score] {resembles Monocytes by the level-1 markers; strongest programme: Monocyte-like programme (score only) (score 0.58)} 
+  MYE_MAC_c11    n=  4072 samples=132 genes= 1762 best=MAC_SPP1       0.917 runner-up=MAC_C1QC      margin= 0.416 -> MAC_SPP1 
+  MYE_MAC_c12    n=  1090 samples= 97 genes=  962 best=MAC_SPP1       0.503 runner-up=MAC_IFN       margin= 0.490 -> MAC_SPP1 {strongest programme: HSP+ programme (score only) (score 1.39)} 
+  MYE_MAC_c13    n=   841 samples=101 genes= 1422 best=MAC_SPP1       0.927 runner-up=MAC_IFN       margin= 0.908 -> MAC_SPP1 {strongest programme: MT+ programme (score only) (score 2.62)} 
+  MYE_MAC_c14    n=  1434 samples= 92 genes= 2090 best=MAC_SPP1       1.276 runner-up=MAC_C1QC      margin= 0.979 -> MAC_SPP1 
+  MYE_MAC_c15    n=  2583 samples=129 genes=  964 best=MAC_C1QC       0.417 runner-up=MAC_RTM       margin= 0.160 -> MAC_C1QC 
+  MYE_MAC_c16    n=   279 samples= 59 genes=  825 best=MAC_SPP1       0.824 runner-up=MAC_C1QC      margin= 0.512 -> MAC_SPP1 
+  MYE_MAC_c17    n=   259 samples= 47 genes= 1804 best=MAC_SPP1       0.744 runner-up=MAC_C1QC      margin= 0.712 -> MAC_SPP1 
+MYE_MONO: 14886 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+MYE_MONO: 14 clusters -> MONO_CD14 x12, MONO_CD16 x2 
+  MYE_MONO_c1    n=   774 samples= 84 genes=  696 best=MONO_CD14      0.980 runner-up=MONO_CD16     margin= 1.022 -> MONO_CD14 
+  MYE_MONO_c2    n=  2189 samples= 96 genes=  612 best=MONO_CD14      1.146 runner-up=MONO_CD16     margin= 1.188 -> MONO_CD14 
+  MYE_MONO_c3    n=  2262 samples=111 genes=  896 best=MONO_CD14      0.443 runner-up=MONO_CD16     margin= 0.459 -> MONO_CD14 
+  MYE_MONO_c4    n=  1652 samples=105 genes= 1588 best=MONO_CD16      0.716 runner-up=MONO_CD14     margin= 1.109 -> MONO_CD16 
+  MYE_MONO_c5    n=   244 samples= 69 genes=  566 best=MONO_CD14      0.495 runner-up=MONO_CD16     margin= 0.434 -> MONO_CD14 
+  MYE_MONO_c6    n=  2498 samples= 81 genes= 1570 best=MONO_CD14      0.760 runner-up=MONO_CD16     margin= 0.865 -> MONO_CD14 
+  MYE_MONO_c7    n=   404 samples= 60 genes=  834 best=MONO_CD14      0.822 runner-up=MONO_CD16     margin= 0.838 -> MONO_CD14 
+  MYE_MONO_c8    n=   757 samples= 69 genes= 2023 best=MONO_CD14      0.154 runner-up=MONO_CD16     margin= 0.210 -> MONO_CD14 
+  MYE_MONO_c9    n=  1985 samples= 64 genes= 1165 best=MONO_CD14      1.170 runner-up=MONO_CD16     margin= 1.132 -> MONO_CD14 
+  MYE_MONO_c10   n=    74 samples= 35 genes=  676 best=MONO_CD14      0.616 runner-up=MONO_CD16     margin= 0.617 -> MONO_CD14 
+  MYE_MONO_c11   n=  1309 samples= 54 genes= 1705 best=MONO_CD14      0.877 runner-up=MONO_CD16     margin= 0.951 -> MONO_CD14 
+  MYE_MONO_c12   n=   284 samples= 54 genes= 1774 best=MONO_CD14      0.915 runner-up=MONO_CD16     margin= 0.880 -> MONO_CD14 
+  MYE_MONO_c13   n=   404 samples= 20 genes=  698 best=MONO_CD16      0.383 runner-up=MONO_CD14     margin= 0.208 -> MONO_CD16 {resembles Neutrophils by the level-1 markers} 
+  MYE_MONO_c14   n=    50 samples= 25 genes=  740 best=MONO_CD14      1.000 runner-up=MONO_CD16     margin= 1.101 -> MONO_CD14 
+MYE_DC: 7361 cells, 2000 variable genes, 30 PCs, Harmony by sample 
+MYE_DC: 16 clusters -> DC_ASDC x1, DC_CDC1 x1, DC_CDC2 x3, DC_DC3 x5, DC_MREG x1, MYE_DC_UNRESOLVED x5 
+  MYE_DC_c1      n=   500 samples= 82 genes= 1652 best=DC_DC3         0.190 runner-up=DC_CDC2       margin= 0.033 -> MYE_DC_UNRESOLVED [two signatures score almost equally] 
+  MYE_DC_c2      n=   287 samples= 56 genes=  978 best=DC_DC3         0.287 runner-up=DC_CDC2       margin= 0.077 -> DC_DC3 
+  MYE_DC_c3      n=   912 samples=107 genes=  712 best=DC_DC3         0.243 runner-up=DC_CDC2       margin= 0.069 -> MYE_DC_UNRESOLVED [few genes detected per cell (possible low-quality cells)] 
+  MYE_DC_c4      n=   269 samples= 63 genes= 1758 best=DC_CDC2        0.346 runner-up=DC_DC3        margin= 0.096 -> DC_CDC2 
+  MYE_DC_c5      n=   214 samples= 62 genes= 1356 best=DC_MREG        1.006 runner-up=DC_CDC1       margin= 0.787 -> DC_MREG 
+  MYE_DC_c6      n=   322 samples= 52 genes= 1496 best=DC_CDC2        0.438 runner-up=DC_ASDC       margin= 0.390 -> DC_CDC2 
+  MYE_DC_c7      n=   699 samples= 71 genes= 1597 best=DC_DC3         0.452 runner-up=DC_CDC2       margin= 0.246 -> DC_DC3 
+  MYE_DC_c8      n=   247 samples= 57 genes= 1742 best=DC_ASDC        0.246 runner-up=DC_CDC2       margin= 0.115 -> DC_ASDC 
+  MYE_DC_c9      n=   368 samples= 72 genes= 1708 best=DC_CDC1        1.124 runner-up=DC_MREG       margin= 1.143 -> DC_CDC1 
+  MYE_DC_c10     n=   699 samples= 57 genes= 2280 best=DC_ASDC        0.116 runner-up=DC_DC3        margin= 0.074 -> MYE_DC_UNRESOLVED [no signature reaches the minimum score] 
+  MYE_DC_c11     n=   504 samples= 54 genes= 2850 best=DC_DC3         0.541 runner-up=DC_ASDC       margin= 0.603 -> DC_DC3 {resembles Monocytes by the level-1 markers} 
+  MYE_DC_c12     n=   560 samples= 80 genes= 1882 best=DC_DC3         0.872 runner-up=DC_CDC2       margin= 0.823 -> DC_DC3 {resembles Monocytes by the level-1 markers} 
+  MYE_DC_c13     n=   342 samples= 60 genes= 1966 best=DC_DC3         0.258 runner-up=DC_ASDC       margin= 0.262 -> DC_DC3 {resembles Macrophages by the level-1 markers} 
+  MYE_DC_c14     n=   660 samples= 91 genes=  820 best=DC_CDC1        0.010 runner-up=DC_DC3        margin= 0.009 -> MYE_DC_UNRESOLVED [no signature reaches the minimum score] 
+  MYE_DC_c15     n=    67 samples=  8 genes=  546 best=DC_DC3         0.620 runner-up=DC_CDC1       margin= 0.706 -> MYE_DC_UNRESOLVED [few genes detected per cell (possible low-quality cells)] {resembles Neutrophils by the level-1 markers} 
+  MYE_DC_c16     n=   711 samples= 60 genes= 1102 best=DC_CDC2        0.348 runner-up=DC_DC3        margin= 0.173 -> DC_CDC2 
+MYE_NEU: score-only programmes (NEU_TAN1, NEU_TAN2, NEU_TAN3, NEU_TAN4), no level-2 labels 
+level-2 cells: DC_ASDC=247, DC_CDC1=368, DC_CDC2=1302, DC_DC3=2392, DC_MREG=214, MAC_C1QC=8105, MAC_IFN=3086, MAC_INFLAM=3819, MAC_SPP1=16525, MONO_CD14=12830, MONO_CD16=2056, MYE_DC_UNRESOLVED=2838, MYE_MAC_UNRESOLVED=17495, MYE_MAST=3306, MYE_NEU=1988 
+groups: 822 sample x lineage, 1543 sample x sub-lineage; with >= 20 cells: 984 
+markers: 652 population-gene pairs (q < 0.05, detected in >= 10% of cells) 
+map subsample: 28567 cells 
+cell labels data-raw/work/pop_myeloid_cell_labels.tsv.gz MD5 d9392517d2ebb32fc89762837b804e76 
+output pop_myeloid.rds 116.9 MB, MD5 27c670f01fbccbbb2e9320cfb81d43b8 
+finished 2026-11-10 08:05:57 UTC 
+R version 4.4.1 (2024-06-14 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 11 x64 (build 26300)
+
+Matrix products: default
+
+
+locale:
+[1] LC_COLLATE=English_Germany.utf8  LC_CTYPE=English_Germany.utf8    LC_MONETARY=English_Germany.utf8 LC_NUMERIC=C                    
+[5] LC_TIME=English_Germany.utf8    
+
+time zone: Europe/Berlin
+tzcode source: internal
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] jsonlite_2.0.0              data.table_1.18.6.1         stringr_1.6.0               dplyr_1.2.1                 celda_1.22.1               
+ [6] Matrix_1.7-5                SingleCellExperiment_1.28.1 SummarizedExperiment_1.36.0 Biobase_2.66.0              GenomicRanges_1.58.0       
+[11] GenomeInfoDb_1.42.3         IRanges_2.40.1              S4Vectors_0.44.0            BiocGenerics_0.52.0         MatrixGenerics_1.18.1      
+[16] matrixStats_1.5.0           Seurat_5.5.0                SeuratObject_5.4.0          sp_2.2-3                   
+
+loaded via a namespace (and not attached):
+  [1] RcppAnnoy_0.0.23        splines_4.4.1           later_1.4.8             tibble_3.3.1            polyclip_1.10-7         pROC_1.19.1            
+  [7] fastDummies_1.7.6       lifecycle_1.0.5         doParallel_1.0.17       globals_0.20.0          lattice_0.22-9          MASS_7.3-65            
+ [13] dendextend_1.19.1       magrittr_2.0.5          plotly_4.12.1           httpuv_1.6.17           otel_0.2.0              sctransform_0.4.3      
+ [19] spam_2.11-4             spatstat.sparse_3.2-0   reticulate_1.47.0       cowplot_1.2.0           pbapply_1.7-5           RColorBrewer_1.1-3     
+ [25] abind_1.4-8             zlibbioc_1.52.0         Rtsne_0.17              purrr_1.2.2             WriteXLS_6.8.0          GenomeInfoDbData_1.2.13
+ [31] ggrepel_0.9.8           irlba_2.3.7             listenv_1.1.0           spatstat.utils_3.2-5    goftest_1.2-3           RSpectra_0.16-2        
+ [37] spatstat.random_3.5-2   fitdistrplus_1.2-6      parallelly_1.48.0       codetools_0.2-20        DelayedArray_0.32.0     scuttle_1.16.0         
+ [43] tidyselect_1.2.1        UCSC.utils_1.2.0        farver_2.1.2            ScaledMatrix_1.14.0     viridis_0.6.5           spatstat.explore_3.8-3 
+ [49] BiocNeighbors_2.0.1     progressr_1.0.0         ggridges_0.5.7          survival_3.8-6          scater_1.34.1           iterators_1.0.14       
+ [55] foreach_1.5.2           dbscan_1.2.4            tools_4.4.1             ica_1.0-3               Rcpp_1.1.2              glue_1.8.1             
+ [61] gridExtra_2.3.1         SparseArray_1.6.2       withr_3.0.3             combinat_0.0-9          fastmap_1.2.0           MCMCprecision_0.4.2    
+ [67] digest_0.6.39           rsvd_1.0.5              R6_2.6.1                mime_0.13               scattermore_1.2         tensor_1.5.1           
+ [73] dichromat_2.0-1         spatstat.data_3.1-9     RhpcBLASctl_0.23-42     tidyr_1.3.2             generics_0.1.4          FNN_1.1.4.1            
+ [79] httr_1.4.9              htmlwidgets_1.6.4       S4Arrays_1.6.0          uwot_0.2.5              pkgconfig_2.0.3         gtable_0.3.6           
+ [85] lmtest_0.9-40           S7_0.2.2                XVector_0.46.0          htmltools_0.5.9         dotCall64_1.2           scales_1.4.0           
+ [91] png_0.1-9               harmony_1.2.4           spatstat.univar_3.2-0   enrichR_3.4             ggdendro_0.2.0          rstudioapi_0.19.0      
+ [97] reshape2_1.4.5          rjson_0.2.23            nlme_3.1-169            curl_8.0.0              zoo_1.8-15              KernSmooth_2.23-26     
+[103] parallel_4.4.1          miniUI_0.1.2            vipor_0.4.7             pillar_1.11.1           grid_4.4.1              vctrs_0.7.3            
+[109] RANN_2.6.3              promises_1.5.0          BiocSingular_1.22.0     beachmat_2.22.0         xtable_1.8-8            cluster_2.1.8.2        
+[115] beeswarm_0.4.0          cli_3.6.6               compiler_4.4.1          rlang_1.3.0             crayon_1.5.3            future.apply_1.20.2    
+[121] plyr_1.8.9              ggbeeswarm_0.7.3        stringi_1.8.9           viridisLite_0.4.3       deldir_2.0-4            BiocParallel_1.40.0    
+[127] spatstat.geom_3.8-3     RcppHNSW_0.7.0          RcppEigen_0.3.4.0.2     patchwork_1.3.2         future_1.80.0           ggplot2_4.0.3          
+[133] shiny_1.14.0            ROCR_1.0-12             igraph_2.3.3           

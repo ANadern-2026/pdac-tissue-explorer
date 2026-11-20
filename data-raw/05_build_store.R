@@ -21,6 +21,9 @@
 #                                            rna_lines = log2(TPM+1) x1000 over all DepMap lines (info$rna_lines); pairs = list(organoid, tumour)
 #                                            over info$hcmi_pairs (HCMI organoids and their source tumours, GDC);
 #                                            ids = index symbols; optional layer
+#   pop_<id>.sqlite tables expr, map    cell populations of one compartment (07): as sc.sqlite expr/umap, plus taxonomy,
+#                                        references and decision record (data-raw/reference/decisions.csv) in info;
+#                                        optional layer, one file per pop_<id>.rds
 # Small tables (sample metadata, column names, single-cell groups, UMAP coordinates) go into each file's
 # `info` table. Every record is decoded again after writing and compared with the source (identical()).
 # Run from the repository root after 01-04 (and 01b, 02b, 03b):  source("data-raw/05_build_store.R")
@@ -263,7 +266,7 @@ check_index <- function(dir, say) {
   say("gene index: all ", nrow(g), " genes resolve to stored records")
 }
 
-# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho", "clinical", "coexp". Layers whose store
+# Build (or rebuild) the store in `dir`. layers: any of "cptac", "bulk", "sc", "phospho", "clinical", "coexp", "models", "pop". Layers whose store
 # file is newer than its source .rds files are skipped unless force = TRUE. The single-cell, phosphosite, clinical and
 # co-expression layers are optional: without their source files they are skipped (an existing store file is kept).
 build_models <- function(dir, say) {
@@ -289,7 +292,88 @@ build_models <- function(dir, say) {
   out
 }
 
-build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho", "clinical", "coexp", "models"), force = FALSE, log = TRUE) {
+# cell populations (07_cell_populations.R): one store per compartment, pop_<id>.rds -> pop_<id>.sqlite
+#   expr  record = list(mean = mean CP10k x100, frac = fraction x10000) over info$groups (sample x population), as sc.sqlite/expr
+#   map   record = log1p(CP10k) of the compartment-map subsample (sparse, 2 decimals), as sc.sqlite/umap
+#   info  taxonomy and references (every definition shown in the app), the decision record (why each label is, or is not,
+#         used, with references), groups, map coordinates/labels/signature scores, the check of the published labels, the
+#         cluster calls with reasons and notes, markers, parameters
+# The decision record comes from data-raw/reference/decisions.csv at store-build time (rows of this compartment and the
+# rows marked "all"), so a changed decision needs only build_store(layers = "pop", force = TRUE), not a new 07 run.
+# References cited by decisions but missing from the 07 output are taken from the current references.csv.
+POP_DECISION_COLS <- c("decision_id", "compartment", "applies_to", "kind", "question", "decision", "reason", "refs")
+POP_DECISION_KINDS <- c("structure", "rule", "signature", "boundary", "score_only", "not_labelled")
+pop_decisions <- function(x, ref_dir) {
+  f <- file.path(ref_dir, "decisions.csv")
+  if (!file.exists(f)) return(list(decisions = x$decisions, references = x$references, md5 = NA_character_))
+  rd <- function(p) utils::read.csv(p, stringsAsFactors = FALSE, check.names = FALSE, encoding = "UTF-8", colClasses = "character", na.strings = character(0))
+  d <- rd(f); miss_col <- setdiff(POP_DECISION_COLS, names(d))
+  if (length(miss_col)) stop("decisions.csv: missing columns ", paste(miss_col, collapse = ", "))
+  if (anyDuplicated(d$decision_id)) stop("decisions.csv: duplicated decision_id ", paste(unique(d$decision_id[duplicated(d$decision_id)]), collapse = ", "))
+  bad_kind <- setdiff(d$kind, POP_DECISION_KINDS)
+  if (length(bad_kind)) stop("decisions.csv: unknown kind ", paste(bad_kind, collapse = ", "))
+  d <- d[d$compartment %in% c("all", x$compartment), POP_DECISION_COLS, drop = FALSE]; rownames(d) <- NULL
+  ids <- function(s) { v <- trimws(unlist(strsplit(s, ";", fixed = TRUE))); v[nzchar(v)] }
+  bad_pop <- setdiff(ids(d$applies_to), x$taxonomy$population_id)
+  if (length(bad_pop)) stop("decisions.csv names populations missing from the ", x$compartment, " taxonomy: ", paste(bad_pop, collapse = ", "))
+  no_ref <- d$decision_id[!nzchar(trimws(d$refs)) & !d$kind %in% c("rule", "structure")]
+  if (length(no_ref)) stop("decisions.csv: decisions without references: ", paste(no_ref, collapse = ", "))
+  tax_refs <- trimws(unlist(strsplit(x$taxonomy$definition_refs, "[;,]"))); tax_refs <- tax_refs[nzchar(tax_refs)]
+  refs <- x$references; want <- unique(c(ids(d$refs), tax_refs)); miss <- setdiff(want, refs$ref_id)
+  if (length(miss) && file.exists(file.path(ref_dir, "references.csv"))) {
+    cur <- rd(file.path(ref_dir, "references.csv")); refs <- rbind(refs, cur[cur$ref_id %in% miss, names(refs), drop = FALSE]) }
+  miss <- setdiff(want, refs$ref_id)
+  if (length(miss)) stop("decisions.csv cites references missing from references.csv: ", paste(miss, collapse = ", "))
+  list(decisions = d, references = refs, md5 = unname(tools::md5sum(f)))
+}
+# Wording of the populations (label, definition, evidence, sources, other names) is taken from the current populations.csv
+# at store-build time, so text edits need only build_store(layers = "pop"), not a new 07 run. Rows whose signature genes or
+# label method changed keep the 07 version (those need 07), with a message.
+POP_TEXT_COLS <- c("label", "definition", "pdac_evidence", "signature_ref", "definition_refs", "also_known_as", "status")
+pop_taxonomy_text <- function(tax, ref_dir, say) {
+  f <- file.path(ref_dir, "populations.csv"); if (!file.exists(f)) return(tax)
+  cur <- utils::read.csv(f, stringsAsFactors = FALSE, check.names = FALSE, encoding = "UTF-8", colClasses = "character", na.strings = character(0))
+  k <- match(tax$population_id, cur$population_id); ok <- !is.na(k)
+  same <- ok & cur$signature_genes[k] == tax$signature_genes & cur$label_method[k] == tax$label_method
+  if (any(ok & !same)) say("populations.csv: signature or method changed for ", paste(tax$population_id[ok & !same], collapse = ", "),
+                           "; their 07 version is kept (rerun 07 for these)")
+  for (cc in intersect(POP_TEXT_COLS, intersect(names(tax), names(cur)))) tax[[cc]][same] <- cur[[cc]][k[same]]
+  tax
+}
+build_pop <- function(dir, say, src, ref_dir = file.path(getOption("pdacx.root", "."), "data-raw", "reference")) {
+  x <- readRDS(src); id <- sub("^pop_(.*)\\.rds$", "\\1", basename(src)); out <- file.path(dir, paste0("pop_", id, ".sqlite"))
+  e <- x$expr; ids <- e$genes; check_ids(ids, "pop")
+  if (!identical(rownames(e$mean_cp10k_x100), ids) || !identical(rownames(e$frac_x10000), ids) || ncol(e$mean_cp10k_x100) != nrow(x$groups) ||
+      !identical(x$groups$group_id, seq_len(nrow(x$groups)))) stop(basename(src), ": expression matrix does not match the groups table")
+  X <- x$map$expr; n <- nrow(X)
+  if (!identical(colnames(X), ids)) stop(basename(src), ": map genes differ from the expression genes")
+  if (nrow(x$map$meta) != n || nrow(x$map$scores) != n) stop(basename(src), ": map coordinates, scores and expression differ in cell number")
+  miss <- setdiff(c(x$groups$population_id, x$map$meta$l1, x$map$meta$l2), c(x$taxonomy$population_id, unique(x$clusters$calls$call)))
+  miss <- miss[!grepl("_UNLABELLED$", miss)]                     # cells without a published label: shown as such by the app
+  if (length(miss)) stop(basename(src), ": populations without a definition in the taxonomy: ", paste(miss, collapse = ", "))
+  x$taxonomy <- pop_taxonomy_text(x$taxonomy, ref_dir, say)
+  dec <- pop_decisions(x, ref_dir)
+  say(basename(out), ": ", if (is.null(dec$decisions)) "no decision record (decisions.csv not found)" else
+      paste0(nrow(dec$decisions), " decisions attached (decisions.csv MD5 ", dec$md5, ")"))
+  s <- store_create(out, paste0("pop_", id), c(expr = "rds-bzip2", map = "sparse16-bzip2"),
+                    list(compartment = x$compartment, id = id, taxonomy = x$taxonomy, references = dec$references,
+                         decisions = if (is.null(dec$decisions)) data.frame() else dec$decisions, decisions_md5 = dec$md5,
+                         level1_method = if (is.null(x$level1_method)) "published" else x$level1_method,
+                         atlas_compare = if (is.null(x$atlas_compare)) data.frame() else x$atlas_compare, groups = x$groups, genes = ids,
+                         map_meta = x$map$meta, map_scores = x$map$scores, map_note = x$map$note, label_check = x$label_check,
+                         cluster_calls = x$clusters$calls, cluster_scores = x$clusters$scores, markers = x$markers, params = x$params,
+                         built_07 = x$built, note = e$note, source_md5 = unname(tools::md5sum(src))))
+  for (k in chunks(length(ids))) store_write(s, "expr", ids[k], lapply(k, function(r) pack_rds(list(mean = unname(e$mean_cp10k_x100[r, ]), frac = unname(e$frac_x10000[r, ])), "bzip2")))
+  col <- function(j) { a <- X@p[j]; b <- X@p[j + 1L]; if (b > a) list(i = X@i[(a + 1L):b] + 1L, x = X@x[(a + 1L):b]) else list(i = integer(0), x = numeric(0)) }
+  for (k in chunks(length(ids))) store_write(s, "map", ids[k], lapply(k, function(j) { cj <- col(j); pack_sparse16(cj$i, cj$x, n, "bzip2") }))
+  store_finish(s)
+  say(basename(out), "/expr: ", verify_table(s$part, "expr", ids, function(k) list(mean = unname(e$mean_cp10k_x100[k, ]), frac = unname(e$frac_x10000[k, ]))), " genes verified")
+  say(basename(out), "/map: ", verify_table(s$part, "map", ids, function(k) { cj <- col(k); v <- numeric(n); v[cj$i] <- cj$x; v }), " genes verified")
+  store_publish(s)
+  out
+}
+
+build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "data")), layers = c("cptac", "bulk", "sc", "phospho", "clinical", "coexp", "models", "pop"), force = FALSE, log = TRUE) {
   log_file <- NULL
   if (log && file.exists(file.path("data-raw", "helpers.R")) && file.access("data-raw", 2) == 0) {
     source(file.path("data-raw", "helpers.R"), local = TRUE); log_file <- start_log("05_build_store")
@@ -299,6 +383,19 @@ build_store <- function(dir = Sys.getenv("PDACX_DATA_DIR", file.path("app", "dat
                clinical = "clinical.rds", coexp = "sc_coexp.rds", models = "models.rds")
   optional <- c("phospho", "clinical", "coexp", "models")      # skipped without their source files (an existing store file is kept)
   for (l in layers) {
+    if (l == "pop") {                                  # optional, one store per compartment (07_cell_populations.R)
+      for (src in list.files(dir, pattern = "^pop_.*\\.rds$", full.names = TRUE)) {
+        out <- sub("\\.rds$", ".sqlite", src)
+        dec_f <- file.path(getOption("pdacx.root", "."), "data-raw", "reference", c("decisions.csv", "references.csv", "populations.csv"))   # changed notes or wording rebuild too
+        newest <- max(c(file.mtime(src), file.mtime(dec_f[file.exists(dec_f)])))
+        if (!force && file.exists(out) && file.mtime(out) > newest && tryCatch({ st <- store_open(out); store_close(st); TRUE }, error = function(e) FALSE)) {
+          say(basename(out), ": up to date, skipped"); next }
+        t0 <- Sys.time(); say("pop: building ", basename(out), " from ", basename(src), " ...")
+        build_pop(dir, say, src); invisible(gc())
+        say(basename(out), ": ", round(file.size(out) / 2^20, 1), " MB, MD5 ", unname(tools::md5sum(out)), ", ", round(as.numeric(Sys.time() - t0, units = "mins"), 1), " min")
+      }
+      next
+    }
     out <- file.path(dir, STORE_LAYERS[[l]]); src <- file.path(dir, srcs[[l]]); src <- src[file.exists(src)]
     if (l == "sc" && !all(file.exists(file.path(dir, c("sc_groups.rds", "sc_expr.rds"))))) { say("sc: source files not found, skipped"); next }
     if (l %in% optional && !all(file.exists(file.path(dir, srcs[[l]])))) {

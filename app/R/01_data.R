@@ -11,6 +11,7 @@ STORE_FORMAT  <- 1L      # bump when the on-disk layout changes (05_build_store.
 STORE_INFO_CODEC <- "rds-gzip"
 STORE_LAYERS  <- c(cptac = "cptac.sqlite", bulk = "bulk.sqlite", sc = "sc.sqlite", phospho = "phospho.sqlite",
                    clinical = "clinical.sqlite", coexp = "coexp.sqlite", models = "models.sqlite")      # all but cptac and bulk are optional
+# plus, optionally, one cell-population store per compartment: pop_<id>.sqlite (data-raw/07_cell_populations.R; read by pop_load())
 STORE_CACHE_MB <- 64     # memory budget of the per-gene record cache (shared by all sessions)
 
 # ---- record codecs (encoders are in data-raw/05_build_store.R) ----
@@ -134,24 +135,30 @@ load_app_data <- function(dir = DATA_DIR) {
     d$models <- store_open(f(STORE_LAYERS[["models"]]))
     d$model_info <- d$models$info[intersect(c("models", "tissue_units", "crispr_lines", "protein_lines", "rna_lines", "similarity", "hcmi_pairs", "moffitt_genes", "n_universe", "source"), names(d$models$info))]
   }
+  d$pops <- pop_load(dir); d$has_pop <- length(d$pops) > 0 && !is.null(d$umap)     # optional: pop_<id>.sqlite (data-raw/07, 05)
   d$choices <- stats::setNames(d$genes$symbol, ifelse(is.na(d$genes$name), d$genes$symbol, paste0(d$genes$symbol, " - ", d$genes$name)))
   d
 }
 
-close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho", "coexp", "models")) store_close(d[[k]]); store_cache_clear(); invisible(NULL) }
+close_app_data <- function(d) { for (k in c("cptac", "bulk", "sc", "phospho", "coexp", "models")) store_close(d[[k]]); for (cp in d$pops) store_close(cp$st); store_cache_clear(); invisible(NULL) }
 
 compartment_of <- function(cell_type, fine_group) {
   key <- ifelse(cell_type == "DUCTAL", ifelse(fine_group %in% names(DUCTAL_GROUP), "TUMOUR_DUCTAL", "OTHER_DUCTAL"), cell_type)
   factor(unname(CELLTYPE_LABELS[key]), levels = CELLTYPE_ORDER)
 }
 
+# tissue state of a sample from the atlas metadata (also used by the cell-population layer)
+tissue_state <- function(disease_state, treatment, met_site) {
+  s <- ifelse(disease_state == "Donor", "Healthy donor",
+       ifelse(disease_state == "Adjacent normal", ifelse(treatment == "Treated", NA, "Adjacent normal"),
+       ifelse(disease_state == "Primary tumor", ifelse(treatment == "Treated", "Primary tumour (treated)", ifelse(treatment == "Treatment-naive", "Primary tumour", NA)),
+       ifelse(disease_state == "Metastatic lesion" & met_site %in% "Liver" & treatment != "Treated", "Liver metastasis", NA))))
+  factor(s, levels = STATE_LEVELS)
+}
+
 prepare_sc_groups <- function(g) {
   g$compartment <- compartment_of(g$cell_type, g$fine_group)
-  g$state <- with(g, ifelse(disease_state == "Donor", "Healthy donor",
-                     ifelse(disease_state == "Adjacent normal", ifelse(treatment == "Treated", NA, "Adjacent normal"),
-                     ifelse(disease_state == "Primary tumor", ifelse(treatment == "Treated", "Primary tumour (treated)", ifelse(treatment == "Treatment-naive", "Primary tumour", NA)),
-                     ifelse(disease_state == "Metastatic lesion" & met_site %in% "Liver" & treatment != "Treated", "Liver metastasis", NA)))))
-  g$state <- factor(g$state, levels = STATE_LEVELS)
+  g$state <- tissue_state(g$disease_state, g$treatment, g$met_site)
   g$ductal_group <- factor(unname(DUCTAL_GROUP[g$fine_group]), levels = DUCTAL_GROUP_ORDER)
   g$fibro_subtype <- factor(ifelse(g$fine_group %in% FIBRO_ORDER, g$fine_group, NA), levels = FIBRO_ORDER)
   g$fibro_class <- factor(ifelse(grepl("^myFb", g$fine_group), "Myofibroblasts (myFb)", ifelse(grepl("^iFb", g$fine_group), "Inflammatory fibroblasts (iFb)", NA)),

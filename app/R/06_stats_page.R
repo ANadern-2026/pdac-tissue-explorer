@@ -7,7 +7,7 @@ STATS_MAX_TRIES <- 5L
 stats_tile <- function(value, label, sub = NULL) div(class = "stat-tile", div(class = "stat-value", value), div(class = "stat-label", label),
                                                     if (!is.null(sub)) div(class = "stat-sub", sub))
 
-stats_page_ui <- function(host) nav_panel("Usage", value = "usage",
+stats_page_ui <- function(host) nav_panel("Usage", value = "usage", icon = nav_icon("usage"),
   div(class = "settings-strip", div(class = "strip-label", "Usage of this app (private page)"),
       div(class = "strip-controls",
           radioButtons("stats_period", NULL, choices = STATS_PERIODS, selected = "30", inline = TRUE),
