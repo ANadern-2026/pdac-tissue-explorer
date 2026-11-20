@@ -198,3 +198,13 @@ details.how-table .how-body { border-left: none; padding-left: 0; }
 .pop-compare th, .pop-compare td { padding: 0.25rem 0.6rem; border-bottom: 1px solid #ecebe7; text-align: right; white-space: nowrap; }
 .pop-compare th:first-child, .pop-compare td:first-child { text-align: left; white-space: normal; min-width: 14rem; }
 .pop-compare thead th { color: #52514e; font-weight: 600; border-bottom: 1px solid #d6d5d0; }
+
+/* survival and hazard-ratio plots: the plotting area is kept square (to_plotly(square = TRUE) sets the height from the width).
+   Side by side and next to each other; each plot scales with the window between 480 px (still legible; below that they stack)
+   and 680 px wide (larger adds nothing). */
+.square-row { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1rem; }
+.square-row > *, .square-row > .shiny-panel-conditional > * { flex: 1 1 480px; max-width: 680px; min-width: 0; }   /* 2nd: newer Shiny lays out
+   a conditional panel as if absent (display: contents), so the plot inside it is the item that has to be sized */
+/* which patients are in the survival analyses (above the Kaplan-Meier plots) */
+.cohort-note { background: #fff7ec; border-left: 4px solid #eb6834; border-radius: 4px; padding: 0.6rem 0.9rem; margin: 0.6rem 0 0.9rem 0;
+               font-size: 0.88rem; line-height: 1.45; color: #2b2a28; max-width: 72rem; }

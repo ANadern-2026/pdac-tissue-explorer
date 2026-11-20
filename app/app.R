@@ -36,7 +36,24 @@ theme_app <- bs_theme(version = 5, bg = "#fcfcfb", fg = "#0b0b0b", primary = "#2
                       base_font = font_collection("Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"),
                       "navbar-bg" = "#ffffff", "card-border-color" = "#e9e8e4")
 
-to_plotly <- function(p, height = NULL, wrap = NULL, colorbar = "Relative<br>expression") {      # wrap: max characters per subtitle line (plots in narrow columns)
+# Survival and hazard-ratio plots: after every draw or resize, set the figure height so that the plotting area is as tall as it is
+# wide (height = plot width + top and bottom margins); the container follows, so the next resize starts from the new height.
+SQUARE_JS <- r"---(function(el) {
+  var busy = false;
+  function fit() {
+    var fl = el._fullLayout; if (busy || !fl || !fl._size || fl._size.w < 50) return;
+    var want = Math.round(fl._size.w + fl._size.t + fl._size.b);
+    if (Math.abs(want - fl.height) <= 2) return;
+    busy = true; el.style.height = want + "px";
+    Plotly.relayout(el, {height: want}).then(function() { busy = false; fit(); }, function() { busy = false; });
+  }
+  el.on("plotly_afterplot", fit); fit();
+  // a plot drawn while hidden (e.g. in a conditional panel) gets plotly's default width; redraw it when its box changes size
+  if (window.ResizeObserver) new ResizeObserver(function() {
+    if (el.offsetWidth > 0 && el._fullLayout && Math.abs(el._fullLayout.width - el.offsetWidth) > 2) Plotly.Plots.resize(el);
+  }).observe(el);
+})---"
+to_plotly <- function(p, height = NULL, wrap = NULL, colorbar = "Relative<br>expression", square = FALSE) {      # wrap: max characters per subtitle line (plots in narrow columns); square: plotting area kept 1:1 (SQUARE_JS)
   ttl <- p$labels$title; sub <- p$labels$subtitle
   if (!is.null(sub) && !is.null(wrap)) sub <- paste(unlist(lapply(strsplit(sub, "\n", fixed = TRUE)[[1]], strwrap, width = wrap)), collapse = "\n"); faceted <- !inherits(p$facet, "FacetNull")
   p$labels$title <- NULL; p$labels$subtitle <- NULL; p$labels$caption <- NULL
@@ -59,13 +76,28 @@ to_plotly <- function(p, height = NULL, wrap = NULL, colorbar = "Relative<br>exp
                 title = list(text = paste0("<b>", ttl, "</b>", if (!is.null(sub)) paste0("<br><span style='font-size:12px;color:#52514e'>", sub, "</span>") else ""),
                              x = 0, xanchor = "left", y = 1, yref = "container", yanchor = "top", pad = list(t = 14), font = list(size = 15)),   # anchored at the top: long wrapped titles never reach the plot
                 margin = list(t = top), hoverlabel = list(bgcolor = "white", font = list(color = "#0b0b0b")))
-  config(out, displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "select2d", "autoScale2d", "hoverCompareCartesian", "toggleSpikelines"))
+  out <- config(out, displaylogo = FALSE, modeBarButtonsToRemove = c("lasso2d", "select2d", "autoScale2d", "hoverCompareCartesian", "toggleSpikelines"))
+  if (square) out <- htmlwidgets::onRender(out, SQUARE_JS)
+  out
 }
 
 fig_downloads <- function(id) div(class = "dl-row", downloadButton(paste0(id, "_pdf"), "Figure (PDF)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_png"), "Figure (PNG)", class = "btn-sm btn-outline-secondary"),
                                   downloadButton(paste0(id, "_csv"), "Data (CSV)", class = "btn-sm btn-outline-secondary"))
 note <- function(...) p(class = "note", ...)
+square_plot <- function(id) div(class = "square-plot", plotlyOutput(id, height = "560px"))   # height is reset in the browser (to_plotly(square = TRUE))
+square_row <- function(...) div(class = "square-row", ...)   # two square plots side by side, stacked when the window is too narrow (style.css)
+# shown above the survival plots (gene page and gene sets). Patient numbers: data-raw/03_recount3.R (147 ductal of 178 primary
+# tumours in the recount3 TCGA-PAAD metadata) and data-raw/03b_clinical.R (CPTAC: 130 tumours with overall survival)
+cohort_note <- function() div(class = "cohort-note",
+  tags$b("Why fewer patients than in GEPIA? "),
+  "TCGA-PAAD has 178 primary tumours, but not all of them are pancreatic ductal adenocarcinoma. This app keeps the 147 with ductal histology; ",
+  "GEPIA and similar tools use all 178, which is why a median split there gives 89 vs 89 patients instead of 73 vs 74 here. ",
+  "The difference matters: ", tags$a("Peran et al. (Clin Cancer Res 2018)", href = "https://pubmed.ncbi.nlm.nih.gov/29739787/", target = "_blank"),
+  " found that TCGA-PAAD includes tumours that are not PDAC, among them neuroendocrine tumours with a much better prognosis, ",
+  "and that keeping them in distorts links between genes and survival. Small differences remain even for the same patients, because expression ",
+  "(recount3) and survival data (TCGA Pan-Cancer Clinical Data Resource) are processed differently. ",
+  "In CPTAC, up to 130 patients have follow-up for RNA, fewer for protein. Each plot gives the number of patients in each group.")
 values_table <- function(label, ...) tags$details(class = "how how-table", tags$summary(label), div(class = "how-body", ...))   # per-sample tables, collapsed under their figures
 how_to <- function(..., label = "How to read this") tags$details(class = "how", tags$summary(label), div(class = "how-body", ...))
 q_head <- function(title, sub = NULL) div(class = "q-head", h4(title), if (!is.null(sub)) p(class = "q-sub", sub))
@@ -124,8 +156,9 @@ ui <- page_fluid(theme = theme_app, class = "app-page",
         if (isTRUE(D$has_clinical)) nav_panel("Clinical context",
           strip(radioButtons("surv_set", "Survival in", inline = TRUE, choices = SURV_CHOICES),
                 radioButtons("surv_cut", "Split patients at", inline = TRUE, choices = CUT_CHOICES)),
-          layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)), plotlyOutput("p_km", height = "500px"), plotlyOutput("p_hr", height = "500px")),
-          layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)), plotlyOutput("p_spline", height = "460px"), plotlyOutput("p_km_other", height = "460px")),
+          cohort_note(),
+          square_row(square_plot("p_km"), square_plot("p_hr")),
+          square_row(square_plot("p_spline"), square_plot("p_km_other")),
           fig_downloads("dl_surv"),
           note("Kaplan-Meier curves compare tumours above the cut-off with those at or below it. The median is fixed in advance; the data-driven cut-off is the split ",
                "(between the 20th and 80th percentile) with the largest log-rank statistic, and its p-value is corrected for that search (maximally selected rank statistics). ",
@@ -240,9 +273,10 @@ ui <- page_fluid(theme = theme_app, class = "app-page",
         sliderInput("set_age", "Age at diagnosis", min = 20, max = 90, value = c(20, 90), step = 1, width = "100%"),
         checkboxGroupInput("set_margin", "Resection margin (CPTAC only)", inline = TRUE, choices = c("R0", "R1", "R2", "RX"), selected = c("R0", "R1", "R2", "RX")))),
     uiOutput("set_summary"),
-    layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)), plotlyOutput("p_set_km", height = "520px"), plotlyOutput("p_set_hr", height = "520px")),
-    layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)), plotlyOutput("p_set_other", height = "480px"),
-                   conditionalPanel("input.set_mode == 'score'", plotlyOutput("p_set_spline", height = "480px"))),
+    cohort_note(),
+    square_row(square_plot("p_set_km"), square_plot("p_set_hr")),
+    square_row(square_plot("p_set_other"),
+                   conditionalPanel("input.set_mode == 'score'", square_plot("p_set_spline"))),
     fig_downloads("dl_sets"),
     note("Survival of PDAC patients grouped by several genes at once. Each gene is called high or low relative to the other tumours of the same dataset ",
          "(all patients with values for every selected gene, before the filters), at the median or as the top or bottom third; no cut-off is optimised per gene. ",
@@ -421,8 +455,8 @@ server <- function(input, output, session) {
   output$p_ductal <- renderPlotly(to_plotly(figs$ductal(), wrap = 75))
 
   # ---- clinical context ----
-  output$p_km <- renderPlotly(to_plotly(figs$km(), wrap = 95)); output$p_hr <- renderPlotly(to_plotly(figs$hr(), wrap = 78))
-  output$p_spline <- renderPlotly(to_plotly(figs$spline(), wrap = 85)); output$p_km_other <- renderPlotly(to_plotly(figs$km_other(), wrap = 85))
+  output$p_km <- renderPlotly(to_plotly(figs$km(), wrap = 85, square = TRUE)); output$p_hr <- renderPlotly(to_plotly(figs$hr(), wrap = 78, square = TRUE))
+  output$p_spline <- renderPlotly(to_plotly(figs$spline(), wrap = 85, square = TRUE)); output$p_km_other <- renderPlotly(to_plotly(figs$km_other(), wrap = 85, square = TRUE))
   output$p_stage <- renderPlotly(to_plotly(figs$stage(), wrap = 85)); output$p_moffitt <- renderPlotly(to_plotly(figs$moffitt(), wrap = 85))
   clin_csv <- reactive({ x <- cv(); if (is.null(x)) return(data.frame(note = paste("No tumour data for", gene())))
     x$value <- round(x$value, 3); names(x)[names(x) == "value"] <- paste0(gene(), "_value")
@@ -554,7 +588,8 @@ server <- function(input, output, session) {
                                formatRound(c("normal", "tumour", "diff"), 3, mark = ""), server = FALSE)
 
   # downloads: figure(s) + underlying data
-  save_figs <- function(file, plots, w, h, dev, ncol = NULL) {
+  save_figs <- function(file, plots, w, h, dev, ncol = NULL, square = FALSE) {   # square: 1:1 plotting area (survival and hazard-ratio plots)
+    if (square) plots <- lapply(plots, function(p) p + theme(aspect.ratio = 1))
     plots <- lapply(plots, for_export, width_in = w)
     if (length(plots) == 1) { ggsave(file, plots[[1]], width = w, height = h, device = dev, bg = "white", dpi = 200); return(invisible()) }
     if (dev == "pdf") { grDevices::pdf(file, width = w, height = h); for (p in plots) print(p); grDevices::dev.off() }
@@ -568,7 +603,7 @@ server <- function(input, output, session) {
              dl_fibro = list(stub = "fibroblast_groups", plots = function() list(figs$fibro()), w = 11, h = 5.5,
                              data = function() pop_fine_table(D$pops$fibroblasts, pop_values(D, D$pops$fibroblasts, gene()), gene())),
              dl_ductal = list(stub = "tumour_cell_states", plots = function() list(figs$ductal()), data = sc_table, w = 9, h = 5),
-             dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr(), figs$spline(), figs$km_other()), data = clin_csv, w = 8, h = 6, ncol = 2),
+             dl_surv = list(stub = "survival", plots = function() list(figs$km(), figs$hr(), figs$spline(), figs$km_other()), data = clin_csv, w = 7, h = 8.5, ncol = 2, square = TRUE),
              dl_stage = list(stub = "stage", plots = function() list(figs$stage()), data = clin_csv, w = 11, h = 5),
              dl_moffitt = list(stub = "classical_basal", plots = function() list(figs$moffitt()), data = clin_csv, w = 11, h = 5),
              dl_coexp = list(stub = "coexpression", plots = function() list(figs$coexp(), figs$coexp_pair()), data = cx_csv, w = 8, h = 9),
@@ -576,8 +611,8 @@ server <- function(input, output, session) {
                               data = function() model_table(mv()), w = 9, h = 6, ncol = 2),
              dl_umap = list(stub = "atlas_map", plots = function() list(figs$umap()), data = function() data.frame(note = "Atlas map values are a subsample; per-sample values are in the Cell types tab (Single-cell values per sample)."), w = 7, h = 6))
   for (k in names(dl)) local({ kk <- k; s <- dl[[kk]]
-    output[[paste0(kk, "_pdf")]] <- downloadHandler(fname(s$stub, "pdf"), function(file) save_figs(file, s$plots(), s$w, s$h, "pdf"))
-    output[[paste0(kk, "_png")]] <- downloadHandler(fname(s$stub, "png"), function(file) save_figs(file, s$plots(), s$w, s$h, "png", s$ncol))
+    output[[paste0(kk, "_pdf")]] <- downloadHandler(fname(s$stub, "pdf"), function(file) save_figs(file, s$plots(), s$w, s$h, "pdf", square = isTRUE(s$square)))
+    output[[paste0(kk, "_png")]] <- downloadHandler(fname(s$stub, "png"), function(file) save_figs(file, s$plots(), s$w, s$h, "png", s$ncol, square = isTRUE(s$square)))
     output[[paste0(kk, "_csv")]] <- downloadHandler(fname(s$stub, "csv"), function(file) utils::write.csv(s$data(), file, row.names = FALSE))
   })
 
@@ -644,16 +679,16 @@ server <- function(input, output, session) {
   figs$set_spline <- reactive({ x <- set_x(); req(set_mode() == "score")
     plot_spline(if (is.null(x)) NULL else surv_spline(transform(x, value = score)), "combined score", set_sel()$dataset, set_sel()$endpoint, cut = set_cutres()$cut,
                 xlab = "Combined score (mean z-score, signed by the chosen direction)") })
-  output$p_set_km <- renderPlotly(to_plotly(figs$set_km(), wrap = 95)); output$p_set_hr <- renderPlotly(to_plotly(figs$set_hr(), wrap = 78))
-  output$p_set_other <- renderPlotly(to_plotly(figs$set_other(), wrap = 85)); output$p_set_spline <- renderPlotly(to_plotly(figs$set_spline(), wrap = 85))
+  output$p_set_km <- renderPlotly(to_plotly(figs$set_km(), wrap = 85, square = TRUE)); output$p_set_hr <- renderPlotly(to_plotly(figs$set_hr(), wrap = 78, square = TRUE))
+  output$p_set_other <- renderPlotly(to_plotly(figs$set_other(), wrap = 85, square = TRUE)); output$p_set_spline <- renderPlotly(to_plotly(figs$set_spline(), wrap = 85, square = TRUE))
   set_csv <- reactive({ x <- set_x(); if (is.null(x) || !nrow(x)) return(data.frame(note = "No patients with values for all genes after the filters"))
     cr <- set_cutres(); x$group <- as.character(set_group(x, set_mode(), cr$cut)); x$dataset <- set_sel()$dataset; x$endpoint <- set_sel()$endpoint
     x$time_months <- round(x$time, 2); x$score <- round(x$score, 4)
     x[, c("dataset", "endpoint", "patient", set_genes(), paste0("in_direction_", set_genes()), "value_count", "score", "group", "time_months", "event", "age", "sex", "stage", "residual")] })
   set_fname <- function(ext) function() paste0("gene_set_survival_", paste(set_genes(), collapse = "_"), "_", format(Sys.Date()), ".", ext)
   set_plots <- function() c(list(figs$set_km(), figs$set_hr(), figs$set_other()), if (set_mode() == "score") list(figs$set_spline()))
-  output$dl_sets_pdf <- downloadHandler(set_fname("pdf"), function(file) save_figs(file, set_plots(), 8, 6, "pdf"))
-  output$dl_sets_png <- downloadHandler(set_fname("png"), function(file) save_figs(file, set_plots(), 8, 6, "png", 2))
+  output$dl_sets_pdf <- downloadHandler(set_fname("pdf"), function(file) save_figs(file, set_plots(), 7, 8.5, "pdf", square = TRUE))
+  output$dl_sets_png <- downloadHandler(set_fname("png"), function(file) save_figs(file, set_plots(), 7, 8.5, "png", 2, square = TRUE))
   output$dl_sets_csv <- downloadHandler(set_fname("csv"), function(file) utils::write.csv(set_csv(), file, row.names = FALSE))
 
   # ---- compare genes ----
